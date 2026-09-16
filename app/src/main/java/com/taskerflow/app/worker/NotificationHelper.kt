@@ -15,6 +15,9 @@ object NotificationHelper {
     const val CHANNEL_REMINDER = "task_reminder"
     const val CHANNEL_ALERT = "tasker_alert"
 
+    private const val ID_FOCUS_LOCK = 99002
+    private const val ID_HEALTH_WARNING = 99001
+
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val mgr = ctx.getSystemService(NotificationManager::class.java)
@@ -81,7 +84,7 @@ object NotificationHelper {
 
     fun showHealthWarning(ctx: Context, health: Int) {
         ensureChannel(ctx)
-        val pi = openAppPi(ctx, 99001)
+        val pi = openAppPi(ctx, ID_HEALTH_WARNING)
 
         val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -97,13 +100,13 @@ object NotificationHelper {
             .build()
 
         try {
-            NotificationManagerCompat.from(ctx).notify(99001, notif)
+            NotificationManagerCompat.from(ctx).notify(ID_HEALTH_WARNING, notif)
         } catch (_: SecurityException) {}
     }
 
     fun showFocusLockActivated(ctx: Context, health: Int) {
         ensureChannel(ctx)
-        val pi = openAppPi(ctx, 99002)
+        val pi = openAppPi(ctx, ID_FOCUS_LOCK)
 
         val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
@@ -112,10 +115,24 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pi)
             .setOngoing(true)
+            .setAutoCancel(false)
             .build()
 
         try {
-            NotificationManagerCompat.from(ctx).notify(99002, notif)
+            NotificationManagerCompat.from(ctx).notify(ID_FOCUS_LOCK, notif)
+        } catch (_: SecurityException) {}
+    }
+
+    /** Call this when Health recovers above threshold — removes the persistent lock notification. */
+    fun cancelFocusLock(ctx: Context) {
+        try {
+            NotificationManagerCompat.from(ctx).cancel(ID_FOCUS_LOCK)
+        } catch (_: SecurityException) {}
+    }
+
+    fun cancelHealthWarning(ctx: Context) {
+        try {
+            NotificationManagerCompat.from(ctx).cancel(ID_HEALTH_WARNING)
         } catch (_: SecurityException) {}
     }
 

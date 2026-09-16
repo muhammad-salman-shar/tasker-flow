@@ -192,6 +192,11 @@ class TaskRepository(
             )
         )
         statsDao.upsert(newStats)
+        // Cancel focus lock notifications if health recovered
+        if (newStats.health >= 55) {
+            NotificationHelper.cancelFocusLock(appContext)
+            NotificationHelper.cancelHealthWarning(appContext)
+        }
         eventDao.insert(
             EventEntity(
                 occurrenceId = occId, taskId = task.id, type = EventType.COMPLETED,
@@ -323,6 +328,7 @@ class TaskRepository(
     }
 
     private fun notifyIfNeeded(before: PlayerStatsEntity, after: PlayerStatsEntity) {
+        // Health crossed DOWN below 50 → warn + lock
         if (before.health >= 50 && after.health < 50) {
             NotificationHelper.showHealthWarning(appContext, after.health)
         }
@@ -330,6 +336,11 @@ class TaskRepository(
             lastFocusLockActive = true
             NotificationHelper.showFocusLockActivated(appContext, after.health)
         }
-        if (after.health >= 55) lastFocusLockActive = false
+        // Health recovered above threshold → cancel persistent Focus Lock notification
+        if (before.health < 55 && after.health >= 55) {
+            lastFocusLockActive = false
+            NotificationHelper.cancelFocusLock(appContext)
+            NotificationHelper.cancelHealthWarning(appContext)
+        }
     }
 }
