@@ -7,7 +7,6 @@ import com.taskerflow.app.TaskerApp
 import com.taskerflow.app.data.model.*
 import com.taskerflow.app.data.profile.ProfileData
 import com.taskerflow.app.data.profile.ProfileRepository
-import com.taskerflow.app.domain.GamificationEngine
 import com.taskerflow.app.worker.AlarmScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -73,16 +72,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun createTask(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
         val (_, occId) = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
         AlarmScheduler.scheduleReminder(
-            ctx = appCtx,
-            occurrenceId = occId,
-            triggerAt = scheduledAt,
-            title = task.title,
-            epReward = task.difficulty.epReward
+            ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
+            title = task.title, epReward = task.difficulty.epReward
         )
     }
 
-    fun updateTask(task: TaskEntity) = viewModelScope.launch { repo.updateTask(task) }
+    /** Edit path: updates task + reschedules occurrence + updates alarm. */
+    fun updateTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
+        val occId = repo.updateTaskWithOccurrence(task, scheduledAt, deadlineAt)
+        if (occId != null && scheduledAt > System.currentTimeMillis()) {
+            AlarmScheduler.cancel(appCtx, occId)
+            AlarmScheduler.scheduleReminder(
+                ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
+                title = task.title, epReward = task.difficulty.epReward
+            )
+        }
+    }
+
     fun deleteTask(taskId: Long) = viewModelScope.launch { repo.deleteTask(taskId) }
+
+    suspend fun fetchTask(id: Long): TaskEntity? = repo.getTask(id)
+    suspend fun fetchLatestOccurrence(taskId: Long): OccurrenceEntity? = repo.getLatestOccurrenceForTask(taskId)
 
     fun snoozeOccurrence(id: Long, minutes: Int) = viewModelScope.launch {
         val occ = repo.getOccurrence(id) ?: return@launch

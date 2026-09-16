@@ -12,6 +12,10 @@ interface OccurrenceDao {
     @Query("DELETE FROM occurrences WHERE taskId = :taskId") suspend fun deleteByTask(taskId: Long)
     @Query("SELECT * FROM occurrences WHERE taskId = :taskId ORDER BY scheduledAt ASC")
     fun observeForTask(taskId: Long): Flow<List<OccurrenceEntity>>
+    @Query("SELECT * FROM occurrences WHERE taskId = :taskId AND status = 'PENDING' ORDER BY scheduledAt ASC LIMIT 1")
+    suspend fun getLatestPendingForTask(taskId: Long): OccurrenceEntity?
+    @Query("SELECT * FROM occurrences WHERE taskId = :taskId ORDER BY scheduledAt DESC LIMIT 1")
+    suspend fun getLatestForTask(taskId: Long): OccurrenceEntity?
     @Query("SELECT * FROM occurrences WHERE scheduledAt BETWEEN :from AND :to ORDER BY scheduledAt ASC")
     fun observeRange(from: Long, to: Long): Flow<List<OccurrenceEntity>>
     @Query("SELECT * FROM occurrences WHERE id = :id LIMIT 1")

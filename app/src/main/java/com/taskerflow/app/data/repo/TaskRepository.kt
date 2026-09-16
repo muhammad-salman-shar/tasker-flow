@@ -37,15 +37,39 @@ class TaskRepository(private val db: AppDatabase) {
         return taskId to occId
     }
 
-    suspend fun updateTask(task: TaskEntity) { taskDao.update(task) }
+    suspend fun updateTask(task: TaskEntity) {
+        taskDao.update(task)
+    }
+
+    /** Update task metadata + the latest pending occurrence's time/deadline. */
+    suspend fun updateTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Long? {
+        taskDao.update(task)
+        val occ = occDao.getLatestPendingForTask(task.id)
+        if (occ != null) {
+            occDao.update(
+                occ.copy(
+                    scheduledAt = scheduledAt,
+                    deadlineAt = deadlineAt,
+                    durationMinutes = task.durationMinutes
+                )
+            )
+            eventDao.insert(EventEntity(occurrenceId = occ.id, taskId = task.id, type = EventType.RESCHEDULED))
+            return occ.id
+        }
+        return null
+    }
 
     suspend fun deleteTask(taskId: Long) {
+        occDao.deleteByTask(taskId)
+        debtDao.deleteByTask(taskId)
+        recoveryDao.deleteByTask(taskId)
         taskDao.archive(taskId)
         eventDao.insert(EventEntity(occurrenceId = 0L, taskId = taskId, type = EventType.DELETED))
     }
 
     suspend fun getOccurrence(id: Long) = occDao.getById(id)
     suspend fun getTask(id: Long) = taskDao.getById(id)
+    suspend fun getLatestOccurrenceForTask(taskId: Long) = occDao.getLatestForTask(taskId)
     suspend fun getAllPendingOccurrences(): List<OccurrenceEntity> = occDao.getAllPending()
 
     suspend fun completeOccurrence(occId: Long, completedAt: Long = System.currentTimeMillis()): Boolean {
@@ -97,21 +121,8 @@ class TaskRepository(private val db: AppDatabase) {
         occDao.update(occ.copy(status = OccurrenceStatus.MISSED))
         val stats = statsDao.get() ?: PlayerStatsEntity()
         statsDao.upsert(GamificationEngine.applyMiss(stats))
-        debtDao.insert(
-            TaskDebtEntity(
-                taskId = occ.taskId,
-                occurrenceId = occId,
-                originalDeadline = occ.deadlineAt
-            )
-        )
-        recoveryDao.insert(
-            RecoveryQuestEntity(
-                taskId = occ.taskId,
-                originOccurrenceId = occId,
-                requiredEp = 10,
-                earnedEp = 0
-            )
-        )
+        debtDao.insert(TaskDebtEntity(taskId = occ.taskId, occurrenceId = occId, originalDeadline = occ.deadlineAt))
+        recoveryDao.insert(RecoveryQuestEntity(taskId = occ.taskId, originOccurrenceId = occId, requiredEp = 10, earnedEp = 0))
         eventDao.insert(EventEntity(occurrenceId = occId, taskId = occ.taskId, type = EventType.MISSED))
         return true
     }
@@ -140,20 +151,13 @@ class TaskRepository(private val db: AppDatabase) {
         for (occ in overdue) {
             val delta = PenaltyEngine.computePenalty(currentStats, occ, now)
             if (delta.minutesCharged > 0) {
-                currentStats = currentStats.copy(
-                    ep = delta.newEp,
-                    health = delta.newHp,
-                    focusLockActive = delta.focusLockActive
-                )
+                currentStats = currentStats.copy(ep = delta.newEp, health = delta.newHp, focusLockActive = delta.focusLockActive)
                 occDao.update(occ.copy(penaltyAppliedCount = occ.penaltyAppliedCount + delta.minutesCharged))
                 eventDao.insert(
                     EventEntity(
-                        occurrenceId = occ.id,
-                        taskId = occ.taskId,
-                        type = EventType.MISSED,
+                        occurrenceId = occ.id, taskId = occ.taskId, type = EventType.MISSED,
                         note = "penalty_tick",
-                        epDelta = -delta.epDrained,
-                        healthDelta = -delta.hpDrained
+                        epDelta = -delta.epDrained, healthDelta = -delta.hpDrained
                     )
                 )
                 chargedCount++

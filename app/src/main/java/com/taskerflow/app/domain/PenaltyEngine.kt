@@ -17,7 +17,7 @@ data class PenaltyDelta(
 object PenaltyEngine {
 
     const val MAX_MINUTES_CHARGED = 100
-    const val EP_PER_MINUTE = 1
+    const val EP_PER_MINUTE = 5
     const val HP_PER_MINUTE = 1
     const val FOCUS_LOCK_HP_THRESHOLD = 50
 

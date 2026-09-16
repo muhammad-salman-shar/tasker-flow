@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 interface TaskDebtDao {
     @Insert suspend fun insert(d: TaskDebtEntity): Long
     @Update suspend fun update(d: TaskDebtEntity)
+    @Query("DELETE FROM task_debt WHERE taskId = :taskId") suspend fun deleteByTask(taskId: Long)
     @Query("SELECT * FROM task_debt WHERE resolved = 0 ORDER BY debtCreatedAt ASC")
     fun observeActive(): Flow<List<TaskDebtEntity>>
     @Query("SELECT * FROM task_debt WHERE occurrenceId = :occId AND resolved = 0 LIMIT 1")
