@@ -138,6 +138,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
+    // ---- App Blocker ----
+    fun blockedPackages(): Flow<Set<String>> =
+        (getApplication() as TaskerApp).blockedAppsRepository.blockedPackages
+    fun strictMode(): Flow<Boolean> =
+        (getApplication() as TaskerApp).blockedAppsRepository.strictMode
+    fun toggleBlockedApp(pkg: String, blocked: Boolean) = viewModelScope.launch {
+        (getApplication() as TaskerApp).blockedAppsRepository.toggleApp(pkg, blocked)
+    }
+    fun setStrictMode(on: Boolean) = viewModelScope.launch {
+        (getApplication() as TaskerApp).blockedAppsRepository.setStrictMode(on)
+    }
+
     fun saveProfile(p: ProfileData) = viewModelScope.launch { profileRepo.save(p) }
     fun currentProfile(): ProfileData = _profile.value
 }
