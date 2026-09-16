@@ -1,6 +1,7 @@
 package com.taskerflow.app
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -37,8 +38,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Force a state recalculation every time the app comes to foreground.
-        // Fixes stale UI after app blocker / background / screen lock.
+        // Recalculate penalty state + fresh UI on every foreground entry
+        vm.refresh()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // App brought to front via existing instance — force refresh
         vm.refresh()
     }
 }

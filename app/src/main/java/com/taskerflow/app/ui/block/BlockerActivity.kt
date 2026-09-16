@@ -22,34 +22,29 @@ import com.taskerflow.app.MainActivity
 class BlockerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { BlockerContent(
-            blockedAppName = intent.getStringExtra("blocked_app") ?: "this app",
-            onOpenTasker = {
-                val i = Intent(this, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        setContent {
+            BlockerContent(
+                blockedAppName = intent.getStringExtra("blocked_app") ?: "this app",
+                onOpenTasker = {
+                    val i = Intent(this, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(i)
+                    // finish AFTER starting MainActivity so it receives focus cleanly
+                    finish()
+                },
+                onGoHome = {
+                    val i = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(i)
+                    finish()
                 }
-                startActivity(i)
-                finish()
-            },
-            onGoHome = {
-                val i = Intent(Intent.ACTION_MAIN).apply {
-                    addCategory(Intent.CATEGORY_HOME)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                startActivity(i)
-                finish()
-            }
-        ) }
-    }
-
-    @Deprecated("Handle back press to stay on blocker screen")
-    override fun onBackPressed() {
-        // Do NOT allow back to reach the blocked app
-        val i = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            )
         }
-        startActivity(i)
     }
 }
 
