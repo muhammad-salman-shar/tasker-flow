@@ -220,12 +220,12 @@ fun DeadlineTaskCard(
                     when (val t = tree) {
                         is RootTree.Weekly -> {
                             t.weeks.forEach { week ->
-                                WeekBlock(week, colors, onCompleteDay, onDayTap)
+                                WeekBlock(week, colors, onCompleteDay, onDayTap, readOnly)
                             }
                         }
                         is RootTree.Monthly -> {
                             t.months.forEach { month ->
-                                MonthBlock(month, colors, onCompleteDay, onDayTap)
+                                MonthBlock(month, colors, onCompleteDay, onDayTap, readOnly)
                             }
                         }
                     }
@@ -240,7 +240,8 @@ private fun MonthBlock(
     month: MonthNode,
     colors: ScaleColors,
     onCompleteDay: (Long) -> Unit,
-    onDayTap: (Long) -> Unit
+    onDayTap: (Long) -> Unit,
+    readOnly: Boolean = false
 ) {
     var open by remember(month.complete) { mutableStateOf(!month.complete) }
     Column(Modifier.padding(top = 6.dp)) {
@@ -275,7 +276,7 @@ private fun MonthBlock(
         AnimatedVisibility(visible = open) {
             Column(Modifier.padding(start = 6.dp)) {
                 month.weeks.forEach { week ->
-                    WeekBlock(week, colors, onCompleteDay, onDayTap)
+                    WeekBlock(week, colors, onCompleteDay, onDayTap, readOnly)
                 }
             }
         }
@@ -287,7 +288,8 @@ private fun WeekBlock(
     week: WeekNode,
     colors: ScaleColors,
     onCompleteDay: (Long) -> Unit,
-    onDayTap: (Long) -> Unit
+    onDayTap: (Long) -> Unit,
+    readOnly: Boolean = false
 ) {
     // Collapse completed week into single summary row
     if (week.complete) {
