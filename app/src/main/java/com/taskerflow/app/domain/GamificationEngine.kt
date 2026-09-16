@@ -8,29 +8,47 @@ data class EpResult(val epGained: Int, val healthGained: Int, val reason: String
 
 object GamificationEngine {
 
-    /** Compute EP for completing a task. onTime=true → full base; late → degrade. */
+    /**
+     * minutesLate > 0  → task completed after deadline (penalty)
+     * minutesLate == 0 → on time (full EP)
+     * minutesLate < 0  → completed early (bonus if 30+ min early)
+     */
     fun computeCompletionEp(baseEp: Int, minutesLate: Int): Int {
-        if (minutesLate <= 0) return baseEp
-        val penalty = min(
-            (minutesLate / 10) * GameConstants.LATE_PENALTY_EP_STEP,
-            GameConstants.LATE_PENALTY_EP_CAP
-        )
-        return max(0, baseEp - penalty)
+        return when {
+            minutesLate <= -GameConstants.EARLY_THRESHOLD_MIN ->
+                baseEp + GameConstants.EARLY_BONUS_EP
+            minutesLate <= 0 -> baseEp
+            else -> {
+                val penalty = min(
+                    (minutesLate / 10) * GameConstants.LATE_PENALTY_EP_STEP,
+                    GameConstants.LATE_PENALTY_EP_CAP
+                )
+                max(0, baseEp - penalty)
+            }
+        }
     }
 
-    /** Apply completion to stats. Returns updated stats. */
-    fun applyCompletion(stats: PlayerStatsEntity, baseEp: Int, minutesLate: Int): Pair<PlayerStatsEntity, EpResult> {
+    fun applyCompletion(
+        stats: PlayerStatsEntity,
+        baseEp: Int,
+        minutesLate: Int
+    ): Pair<PlayerStatsEntity, EpResult> {
         val gained = computeCompletionEp(baseEp, minutesLate)
         val newEp = stats.ep + gained
 
-        // Every EP_PER_HEALTH_TICK EP crossing → +HEALTH_GAIN_PER_TICK health
-        val healthTicksGained = newEp / GameConstants.EP_PER_HEALTH_TICK
-        val oldHealthTicks = stats.ep / GameConstants.EP_PER_HEALTH_TICK
-        val tickDelta = healthTicksGained - oldHealthTicks
+        val oldTicks = stats.ep / GameConstants.EP_PER_HEALTH_TICK
+        val newTicks = newEp / GameConstants.EP_PER_HEALTH_TICK
+        val tickDelta = newTicks - oldTicks
         val healthGain = tickDelta * GameConstants.HEALTH_GAIN_PER_TICK
         val newHealth = min(GameConstants.HEALTH_MAX, stats.health + healthGain)
 
         val newLevel = computeLevel(newEp)
+
+        val reason = when {
+            minutesLate <= -GameConstants.EARLY_THRESHOLD_MIN -> "early"
+            minutesLate > 0 -> "late"
+            else -> "on_time"
+        }
 
         val updated = stats.copy(
             ep = newEp,
@@ -40,19 +58,16 @@ object GamificationEngine {
             recoveryModeActive = newEp < GameConstants.RECOVERY_MODE_CLEAR_EP && stats.recoveryModeActive,
             focusLockActive = newHealth < GameConstants.FOCUS_RELEASE_HEALTH_THRESHOLD && stats.focusLockActive
         )
-        return updated to EpResult(gained, healthGain, if (minutesLate > 0) "late" else "on_time")
+        return updated to EpResult(gained, healthGain, reason)
     }
 
-    /** Apply miss penalty. */
     fun applyMiss(stats: PlayerStatsEntity): PlayerStatsEntity {
         val newHealth = max(GameConstants.HEALTH_MIN, stats.health - GameConstants.MISS_PENALTY_HEALTH)
-        val focusLock = newHealth < GameConstants.FOCUS_LOCK_HEALTH_THRESHOLD
-        val recoveryMode = stats.ep < GameConstants.RECOVERY_MODE_CLEAR_EP
         return stats.copy(
             health = newHealth,
             totalMissed = stats.totalMissed + 1,
-            recoveryModeActive = recoveryMode,
-            focusLockActive = focusLock
+            recoveryModeActive = stats.ep < GameConstants.RECOVERY_MODE_CLEAR_EP,
+            focusLockActive = newHealth < GameConstants.FOCUS_LOCK_HEALTH_THRESHOLD
         )
     }
 

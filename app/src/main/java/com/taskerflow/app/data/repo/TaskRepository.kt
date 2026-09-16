@@ -42,7 +42,7 @@ class TaskRepository(private val db: AppDatabase) {
         val task = taskDao.getById(occ.taskId) ?: return false
         val stats = statsDao.get() ?: PlayerStatsEntity()
 
-        val minutesLate = ((completedAt - occ.deadlineAt) / 60000L).toInt().coerceAtLeast(0)
+        val minutesLate = ((completedAt - occ.deadlineAt) / 60000L).toInt()
         val baseEp = task.difficulty.epReward
         val (newStats, epResult) = com.taskerflow.app.domain.GamificationEngine
             .applyCompletion(stats, baseEp, minutesLate)
