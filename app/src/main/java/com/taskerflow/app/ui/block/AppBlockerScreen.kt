@@ -35,6 +35,7 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
     val blocked by vm.blockedPackages().collectAsState(initial = emptySet())
     val strict by vm.strictMode().collectAsState(initial = false)
     val serviceRunning by AppBlockerAccessibilityService.running.collectAsState()
+    var testOn by remember { mutableStateOf(AppBlockerAccessibilityService.testMode.value) }
 
     // Reload apps when screen first appears
     val allApps = remember { InstalledAppsLoader.load(ctx) }
@@ -118,6 +119,34 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(12.dp))
+
+            // TEST MODE demo toggle (does NOT affect real state)
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1A0F)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Row(
+                    Modifier.padding(14.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🧪 Test Mode", color = Color(0xFFFFB300), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Simulate Health < 50 to preview blocking. No real effect.",
+                            color = Color(0xFF79829C), fontSize = 11.sp
+                        )
+                    }
+                    Switch(
+                        checked = testOn,
+                        onCheckedChange = { testOn = it; AppBlockerAccessibilityService.testMode.value = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = Color(0xFFFFB300)
+                        )
+                    )
+                }
+            }
 
             // Strict mode toggle
             Card(

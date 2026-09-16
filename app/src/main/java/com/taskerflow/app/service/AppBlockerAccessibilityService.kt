@@ -25,6 +25,8 @@ class AppBlockerAccessibilityService : AccessibilityService() {
     private var lastBlockedAt: Long = 0L
 
     companion object {
+        // TEST MODE: force-block toggle for demo. Does NOT affect real state.
+        val testMode = kotlinx.coroutines.flow.MutableStateFlow(false)
         val running = MutableStateFlow(false)
 
         val ESSENTIALS = setOf(
@@ -67,7 +69,7 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
 
         // Fast path: don't do anything if not in blocking state
-        if (!healthBelow50) return
+        if (!healthBelow50 && !testMode.value) return
 
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
