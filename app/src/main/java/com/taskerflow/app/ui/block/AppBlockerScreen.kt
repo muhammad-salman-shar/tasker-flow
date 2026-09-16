@@ -1,5 +1,7 @@
 package com.taskerflow.app.ui.block
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.taskerflow.app.data.block.InstalledApp
 import com.taskerflow.app.data.block.InstalledAppsLoader
+import com.taskerflow.app.service.AppBlockerAccessibilityService
 import com.taskerflow.app.ui.MainViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,7 +34,9 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val blocked by vm.blockedPackages().collectAsState(initial = emptySet())
     val strict by vm.strictMode().collectAsState(initial = false)
+    val serviceRunning by AppBlockerAccessibilityService.running.collectAsState()
 
+    // Reload apps when screen first appears
     val allApps = remember { InstalledAppsLoader.load(ctx) }
     var query by remember { mutableStateOf("") }
 
@@ -60,28 +65,59 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
         containerColor = Color(0xFF090A10)
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            // Status card
+
+            // Accessibility permission status card
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF17171E)),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (serviceRunning) Color(0xFF0F1F14) else Color(0xFF2A1A13)
+                ),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("HOW IT WORKS", color = Color(0xFF79829C), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "When Health drops below 50%, selected apps will be blocked until you complete a task and recover.",
-                        color = Color.White, fontSize = 12.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (serviceRunning) "✅" else "⚠️", fontSize = 18.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (serviceRunning) "Blocker Service Active"
+                            else "Blocker Service Disabled",
+                            color = if (serviceRunning) Color(0xFF66BB6A) else Color(0xFFFFB300),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "⚠️ Accessibility permission required. Enable in Settings → Accessibility → Tasker Flow.",
-                        color = Color(0xFFFFB300), fontSize = 11.sp
+                        if (serviceRunning)
+                            "Your selected apps will be blocked when Health drops below 50%."
+                        else
+                            "To block apps, you must enable Accessibility for Tasker Flow.",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 12.sp
                     )
+                    if (!serviceRunning) {
+                        Spacer(Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                ctx.startActivity(i)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFFFB300),
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("ENABLE ACCESSIBILITY", fontWeight = FontWeight.Black)
+                        }
+                    }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
 
             // Strict mode toggle
             Card(
@@ -112,10 +148,9 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (!strict) {
-                // Search
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -131,9 +166,9 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
                         cursorColor = Color(0xFFFFB300)
                     )
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    "${blocked.size} app(s) selected",
+                    "${allApps.size} apps found • ${blocked.size} blocked",
                     color = Color(0xFFFFB300), fontSize = 11.sp, fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(6.dp))
@@ -207,11 +242,7 @@ private fun AppRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(app.label, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    app.packageName,
-                    color = Color(0xFF79829C), fontSize = 10.sp,
-                    maxLines = 1
-                )
+                Text(app.packageName, color = Color(0xFF79829C), fontSize = 10.sp, maxLines = 1)
             }
             Switch(
                 checked = blocked,
