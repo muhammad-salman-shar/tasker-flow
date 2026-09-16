@@ -61,46 +61,55 @@ class TaskRepository(
         task: TaskEntity,
         startMillis: Long,
         endMillis: Long
-    ): Pair<Long, List<Long>>? {
+    ): Pair<Long, List<OccurrenceEntity>>? {
         if (!saveInFlight.compareAndSet(false, true)) return null
         try {
             val zone = ZoneId.systemDefault()
-            val startDate = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
+            val startZ = Instant.ofEpochMilli(startMillis).atZone(zone)
+            val startDate = startZ.toLocalDate()
+            val dailyTime = startZ.toLocalTime()   // daily reminder time
             val endDate = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
             val (from, to) = if (startDate.isAfter(endDate)) endDate to startDate else startDate to endDate
             val totalDays = ChronoUnit.DAYS.between(from, to).toInt() + 1
 
             val diff = when {
-                totalDays <= 7 -> Difficulty.EASY       // 5
-                totalDays <= 31 -> Difficulty.NORMAL    // 10
-                else -> Difficulty.HARD                 // 15
+                totalDays <= 7 -> Difficulty.EASY
+                totalDays <= 31 -> Difficulty.NORMAL
+                else -> Difficulty.HARD
             }
 
             val taskId = taskDao.insert(task.copy(difficulty = diff))
-            val occIds = mutableListOf<Long>()
+            val createdOccurrences = mutableListOf<OccurrenceEntity>()
 
             var current = from
             var dayIndex = 1
             while (!current.isAfter(to) && dayIndex <= 3650) {
-                val dayStart = current.atStartOfDay(zone).toInstant().toEpochMilli()
-                val dayEnd = current.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-                val id = occDao.insert(
-                    OccurrenceEntity(
-                        taskId = taskId,
-                        scheduledAt = dayStart,
-                        deadlineAt = dayEnd,
-                        durationMinutes = 0,
-                        status = OccurrenceStatus.PENDING
+                // scheduledAt = current date + daily reminder time (e.g., 07:00)
+                val scheduledInstant = current.atTime(dailyTime).atZone(zone).toInstant().toEpochMilli()
+                // deadlineAt = end of that day (23:59:59)
+                val deadlineInstant = current.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+
+                val occ = OccurrenceEntity(
+                    taskId = taskId,
+                    scheduledAt = scheduledInstant,
+                    deadlineAt = deadlineInstant,
+                    durationMinutes = 0,
+                    status = OccurrenceStatus.PENDING
+                )
+                val id = occDao.insert(occ)
+                val saved = occ.copy(id = id)
+                createdOccurrences.add(saved)
+
+                eventDao.insert(
+                    EventEntity(
+                        occurrenceId = id, taskId = taskId,
+                        type = EventType.CREATED, note = "day_$dayIndex"
                     )
                 )
-                eventDao.insert(
-                    EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED, note = "day_$dayIndex")
-                )
-                occIds.add(id)
                 current = current.plusDays(1)
                 dayIndex++
             }
-            return taskId to occIds
+            return taskId to createdOccurrences
         } finally {
             saveInFlight.set(false)
         }

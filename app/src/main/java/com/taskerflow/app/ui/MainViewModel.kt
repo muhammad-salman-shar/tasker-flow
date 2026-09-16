@@ -73,10 +73,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun completeOccurrence(id: Long) = viewModelScope.launch { repo.completeOccurrence(id) }
     fun uncompleteOccurrence(id: Long) = viewModelScope.launch { repo.uncompleteOccurrence(id) }
 
-    /**
-     * Suspend save — caller awaits DB commit, then navigates.
-     * Returns true if saved, false if duplicate (in-flight).
-     */
     suspend fun saveTaskAndWait(
         task: TaskEntity,
         scheduledAt: Long,
@@ -87,12 +83,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return if (isDeadline) {
             val result = repo.createDeadlineTaskWithDays(task, scheduledAt, deadlineEndMillis)
                 ?: return false
-            val (_, occIds) = result
-            occIds.firstOrNull()?.let { firstOcc ->
-                AlarmScheduler.scheduleReminder(
-                    ctx = appCtx, occurrenceId = firstOcc, triggerAt = scheduledAt,
-                    title = task.title, epReward = task.difficulty.epReward
-                )
+            val (_, occs) = result
+            // Schedule reminders for EVERY day
+            val now = System.currentTimeMillis()
+            occs.forEach { occ ->
+                if (occ.scheduledAt > now) {
+                    AlarmScheduler.scheduleReminder(
+                        ctx = appCtx,
+                        occurrenceId = occ.id,
+                        triggerAt = occ.scheduledAt,
+                        title = task.title,
+                        epReward = task.difficulty.epReward
+                    )
+                }
             }
             true
         } else {
@@ -132,15 +135,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun getTaskById(id: Long): TaskEntity? = homeState.value.tasksById[id]
-
-    fun blockedPackages(): kotlinx.coroutines.flow.Flow<Set<String>> = (getApplication() as TaskerApp).blockedAppsRepository.blockedPackages
-    fun strictMode(): kotlinx.coroutines.flow.Flow<Boolean> = (getApplication() as TaskerApp).blockedAppsRepository.strictMode
-    fun toggleBlockedApp(pkg: String, blocked: Boolean) = viewModelScope.launch {
-        (getApplication() as TaskerApp).blockedAppsRepository.toggleApp(pkg, blocked)
-    }
-    fun setStrictMode(on: Boolean) = viewModelScope.launch {
-        (getApplication() as TaskerApp).blockedAppsRepository.setStrictMode(on)
-    }
 
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
