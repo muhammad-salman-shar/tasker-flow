@@ -1,7 +1,5 @@
 package com.taskerflow.app.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,13 +7,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,13 +30,9 @@ fun TaskCard(
     onComplete: (() -> Unit)? = null
 ) {
     val style = cardStyle(status)
-    val isDone = status == OccurrenceStatus.COMPLETED || status == OccurrenceStatus.RECOVERED
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = tween(120),
-        label = "scale"
-    )
+    val isDone = status == OccurrenceStatus.COMPLETED ||
+                 status == OccurrenceStatus.RECOVERED
+    val canComplete = !isDone && onComplete != null
 
     Card(
         colors = CardDefaults.cardColors(containerColor = style.bg),
@@ -47,23 +40,21 @@ fun TaskCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp)
-            .scale(scale)
             .border(1.dp, style.border, RoundedCornerShape(16.dp))
-            .clickable(enabled = onClick != null) { onClick?.invoke() }
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() } else Modifier
+            )
     ) {
         Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
+            Modifier.padding(end = 12.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Big touch-friendly checkbox
+            // Checkbox as IconButton (reliable, distinct touch target)
             Box(
                 Modifier
-                    .size(44.dp)
+                    .size(56.dp)
                     .clip(CircleShape)
-                    .clickable(enabled = !isDone && onComplete != null) {
-                        pressed = true
-                        onComplete?.invoke()
-                    },
+                    .clickable(enabled = canComplete) { onComplete?.invoke() },
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -75,12 +66,15 @@ fun TaskCard(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isDone) {
-                        Icon(Icons.Filled.Check, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = "Completed",
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
-
-            Spacer(Modifier.width(12.dp))
 
             Column(Modifier.weight(1f)) {
                 Text(
@@ -101,25 +95,20 @@ fun TaskCard(
 private data class CardStyle(
     val bg: Color,
     val border: Color,
-    val accent: Color,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
+    val accent: Color
 )
 
 private fun cardStyle(status: OccurrenceStatus): CardStyle = when (status) {
     OccurrenceStatus.COMPLETED, OccurrenceStatus.RECOVERED -> CardStyle(
-        bg = Color(0xFF0F1F14), border = Color(0xFF1E4A25), accent = Color(0xFF66BB6A),
-        icon = Icons.Filled.CheckCircle
+        bg = Color(0xFF0F1F14), border = Color(0xFF1E4A25), accent = Color(0xFF66BB6A)
     )
     OccurrenceStatus.LATE -> CardStyle(
-        bg = Color(0xFF221A0C), border = Color(0xFF5C4600), accent = Color(0xFFFFC107),
-        icon = Icons.Filled.Schedule
+        bg = Color(0xFF221A0C), border = Color(0xFF5C4600), accent = Color(0xFFFFC107)
     )
     OccurrenceStatus.MISSED, OccurrenceStatus.SKIPPED -> CardStyle(
-        bg = Color(0xFF221010), border = Color(0xFF5C1A1A), accent = Color(0xFFEF5350),
-        icon = Icons.Filled.ErrorOutline
+        bg = Color(0xFF221010), border = Color(0xFF5C1A1A), accent = Color(0xFFEF5350)
     )
     OccurrenceStatus.PENDING -> CardStyle(
-        bg = Color(0xFF17171E), border = Color(0xFF2A2A32), accent = Color(0xFFFFC107),
-        icon = Icons.Filled.RadioButtonUnchecked
+        bg = Color(0xFF17171E), border = Color(0xFF2A2A32), accent = Color(0xFFFFC107)
     )
 }

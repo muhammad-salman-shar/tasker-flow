@@ -34,4 +34,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Force a state recalculation every time the app comes to foreground.
+        // Fixes stale UI after app blocker / background / screen lock.
+        vm.refresh()
+    }
 }
