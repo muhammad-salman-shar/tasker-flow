@@ -34,6 +34,8 @@ fun TaskCard(
                  status == OccurrenceStatus.LATE ||
                  status == OccurrenceStatus.RECOVERED
 
+    val canComplete = !isDone && onComplete != null
+
     Card(
         colors = CardDefaults.cardColors(containerColor = style.bg),
         shape = RoundedCornerShape(16.dp),
