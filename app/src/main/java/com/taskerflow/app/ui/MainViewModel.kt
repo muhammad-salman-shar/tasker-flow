@@ -8,6 +8,7 @@ import com.taskerflow.app.data.model.*
 import com.taskerflow.app.data.profile.ProfileData
 import com.taskerflow.app.data.profile.ProfileRepository
 import com.taskerflow.app.domain.GamificationEngine
+import com.taskerflow.app.worker.AlarmScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -25,6 +26,7 @@ data class HomeUiState(
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = (app as TaskerApp).repository
     private val profileRepo: ProfileRepository = (app as TaskerApp).profileRepository
+    private val appCtx = app.applicationContext
 
     private val _stats = repo.observeStats().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val _profile = profileRepo.profile.stateIn(viewModelScope, SharingStarted.Eagerly, ProfileData())
@@ -67,8 +69,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
     fun completeOccurrence(id: Long) = viewModelScope.launch { repo.completeOccurrence(id) }
-    fun createTask(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) =
-        viewModelScope.launch { repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt) }
+
+    fun createTask(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
+        val (_, occId) = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
+        AlarmScheduler.scheduleReminder(
+            ctx = appCtx,
+            occurrenceId = occId,
+            triggerAt = scheduledAt,
+            title = task.title,
+            epReward = task.difficulty.epReward
+        )
+    }
+
     fun updateTask(task: TaskEntity) = viewModelScope.launch { repo.updateTask(task) }
     fun deleteTask(taskId: Long) = viewModelScope.launch { repo.deleteTask(taskId) }
 

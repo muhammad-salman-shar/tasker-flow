@@ -36,6 +36,11 @@
         </receiver>
 
         <receiver
+            android:name=".worker.ReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
             android:name=".worker.TaskActionReceiver"
             android:enabled="true"
             android:exported="false" />

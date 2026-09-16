@@ -1,5 +1,6 @@
 package com.taskerflow.app.worker
 
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,11 +17,27 @@ class TaskActionReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         val repo = (context.applicationContext as TaskerApp).repository
         val scope = CoroutineScope(Dispatchers.IO)
+
+        // dismiss notification
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .cancel(occId.toInt())
+
         when (action) {
-            ACTION_COMPLETE -> scope.launch { repo.completeOccurrence(occId) }
+            ACTION_COMPLETE -> scope.launch {
+                repo.completeOccurrence(occId)
+                AlarmScheduler.cancel(context, occId)
+            }
             ACTION_SNOOZE -> scope.launch {
                 val occ = repo.getOccurrence(occId) ?: return@launch
-                repo.snoozeOccurrence(occId, occ.scheduledAt + 10 * 60_000L, occ.deadlineAt + 10 * 60_000L)
+                val newSched = occ.scheduledAt + 10 * 60_000L
+                val newDeadline = occ.deadlineAt + 10 * 60_000L
+                repo.snoozeOccurrence(occId, newSched, newDeadline)
+                val task = repo.getTask(occ.taskId)
+                if (task != null) {
+                    AlarmScheduler.scheduleReminder(
+                        context, occId, newSched, task.title, task.difficulty.epReward
+                    )
+                }
             }
             else -> Log.w("TaskerFlow", "Unknown action: $action")
         }

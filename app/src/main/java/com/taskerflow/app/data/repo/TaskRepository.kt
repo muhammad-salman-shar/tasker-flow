@@ -46,6 +46,7 @@ class TaskRepository(private val db: AppDatabase) {
 
     suspend fun getOccurrence(id: Long) = occDao.getById(id)
     suspend fun getTask(id: Long) = taskDao.getById(id)
+    suspend fun getAllPendingOccurrences(): List<OccurrenceEntity> = occDao.getAllPending()
 
     suspend fun completeOccurrence(occId: Long, completedAt: Long = System.currentTimeMillis()): Boolean {
         val occ = occDao.getById(occId) ?: return false
@@ -129,10 +130,6 @@ class TaskRepository(private val db: AppDatabase) {
 
     suspend fun getStatsNow(): PlayerStatsEntity = statsDao.get() ?: PlayerStatsEntity()
 
-    /**
-     * Runs the per-minute penalty engine on all pending overdue occurrences.
-     * Returns number of occurrences charged this tick.
-     */
     suspend fun applyPenaltiesTick(now: Long = System.currentTimeMillis()): Int {
         val overdue = occDao.getOverdue(now)
         if (overdue.isEmpty()) return 0
