@@ -9,21 +9,29 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.taskerflow.app.MainActivity
-import com.taskerflow.app.R
 
 object NotificationHelper {
 
     const val CHANNEL_REMINDER = "task_reminder"
+    const val CHANNEL_ALERT = "tasker_alert"
 
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val mgr = ctx.getSystemService(NotificationManager::class.java)
-            val ch = NotificationChannel(
+
+            val reminder = NotificationChannel(
                 CHANNEL_REMINDER,
                 "Task Reminders",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply { description = "Reminders for upcoming tasks" }
-            mgr.createNotificationChannel(ch)
+            mgr.createNotificationChannel(reminder)
+
+            val alert = NotificationChannel(
+                CHANNEL_ALERT,
+                "Health & Focus Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply { description = "Warnings when health is critical" }
+            mgr.createNotificationChannel(alert)
         }
     }
 
@@ -35,30 +43,23 @@ object NotificationHelper {
         dueAt: Long
     ) {
         ensureChannel(ctx)
+        val openPi = openAppPi(ctx, occurrenceId.toInt())
 
-        val openIntent = Intent(ctx, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val openPi = PendingIntent.getActivity(
-            ctx, occurrenceId.toInt(), openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val completeIntent = Intent(ctx, TaskActionReceiver::class.java).apply {
-            action = TaskActionReceiver.ACTION_COMPLETE
-            putExtra(TaskActionReceiver.EXTRA_OCCURRENCE_ID, occurrenceId)
-        }
         val completePi = PendingIntent.getBroadcast(
-            ctx, (occurrenceId + 100000).toInt(), completeIntent,
+            ctx, (occurrenceId + 100000).toInt(),
+            Intent(ctx, TaskActionReceiver::class.java).apply {
+                action = TaskActionReceiver.ACTION_COMPLETE
+                putExtra(TaskActionReceiver.EXTRA_OCCURRENCE_ID, occurrenceId)
+            },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val snoozeIntent = Intent(ctx, TaskActionReceiver::class.java).apply {
-            action = TaskActionReceiver.ACTION_SNOOZE
-            putExtra(TaskActionReceiver.EXTRA_OCCURRENCE_ID, occurrenceId)
-        }
         val snoozePi = PendingIntent.getBroadcast(
-            ctx, (occurrenceId + 200000).toInt(), snoozeIntent,
+            ctx, (occurrenceId + 200000).toInt(),
+            Intent(ctx, TaskActionReceiver::class.java).apply {
+                action = TaskActionReceiver.ACTION_SNOOZE
+                putExtra(TaskActionReceiver.EXTRA_OCCURRENCE_ID, occurrenceId)
+            },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -75,6 +76,56 @@ object NotificationHelper {
 
         try {
             NotificationManagerCompat.from(ctx).notify(occurrenceId.toInt(), notif)
-        } catch (_: SecurityException) { /* user denied POST_NOTIFICATIONS */ }
+        } catch (_: SecurityException) {}
+    }
+
+    fun showHealthWarning(ctx: Context, health: Int) {
+        ensureChannel(ctx)
+        val pi = openAppPi(ctx, 99001)
+
+        val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("⚠️ Health Critical: $health%")
+            .setContentText("Your apps will be blocked soon. Recover by completing your tasks.")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText("Your apps will be blocked soon. Recover them by completing your task.")
+            )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(ctx).notify(99001, notif)
+        } catch (_: SecurityException) {}
+    }
+
+    fun showFocusLockActivated(ctx: Context, health: Int) {
+        ensureChannel(ctx)
+        val pi = openAppPi(ctx, 99002)
+
+        val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("🔒 Focus Lock Active")
+            .setContentText("Apps blocked. Health $health%. Complete tasks to unlock.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(ctx).notify(99002, notif)
+        } catch (_: SecurityException) {}
+    }
+
+    private fun openAppPi(ctx: Context, id: Int): PendingIntent {
+        val openIntent = Intent(ctx, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            ctx, id, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
     }
 }

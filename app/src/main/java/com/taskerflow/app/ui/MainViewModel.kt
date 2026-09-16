@@ -67,6 +67,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState())
 
+    fun observeOccurrencesForTask(taskId: Long): Flow<List<OccurrenceEntity>> =
+        repo.observeOccurrencesForTask(taskId)
+
     fun completeOccurrence(id: Long) = viewModelScope.launch { repo.completeOccurrence(id) }
 
     fun createTask(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
@@ -77,7 +80,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /** Edit path: updates task + reschedules occurrence + updates alarm. */
+    fun createDeadlineTask(task: TaskEntity, startMillis: Long, endMillis: Long) = viewModelScope.launch {
+        val (_, occIds) = repo.createDeadlineTaskWithDays(task, startMillis, endMillis)
+        // schedule reminder for day 1 only
+        occIds.firstOrNull()?.let { firstOcc ->
+            AlarmScheduler.scheduleReminder(
+                ctx = appCtx, occurrenceId = firstOcc, triggerAt = startMillis,
+                title = task.title, epReward = task.difficulty.epReward
+            )
+        }
+    }
+
     fun updateTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
         val occId = repo.updateTaskWithOccurrence(task, scheduledAt, deadlineAt)
         if (occId != null && scheduledAt > System.currentTimeMillis()) {
@@ -90,6 +103,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteTask(taskId: Long) = viewModelScope.launch { repo.deleteTask(taskId) }
+    fun deleteOccurrence(occId: Long) = viewModelScope.launch { repo.deleteOccurrence(occId) }
 
     suspend fun fetchTask(id: Long): TaskEntity? = repo.getTask(id)
     suspend fun fetchLatestOccurrence(taskId: Long): OccurrenceEntity? = repo.getLatestOccurrenceForTask(taskId)

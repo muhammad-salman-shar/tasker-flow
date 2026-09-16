@@ -1,12 +1,18 @@
 package com.taskerflow.app.data.repo
 
+import android.content.Context
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.model.*
 import com.taskerflow.app.domain.GamificationEngine
 import com.taskerflow.app.domain.PenaltyEngine
+import com.taskerflow.app.worker.NotificationHelper
 import kotlinx.coroutines.flow.Flow
+import java.util.Calendar
 
-class TaskRepository(private val db: AppDatabase) {
+class TaskRepository(
+    private val db: AppDatabase,
+    private val appContext: Context
+) {
 
     private val taskDao = db.taskDao()
     private val occDao = db.occurrenceDao()
@@ -15,12 +21,15 @@ class TaskRepository(private val db: AppDatabase) {
     private val recoveryDao = db.recoveryQuestDao()
     private val statsDao = db.playerStatsDao()
 
+    private var lastFocusLockActive = false
+
     fun observeTasks(): Flow<List<TaskEntity>> = taskDao.observeActive()
     fun observeOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
     fun observeAllOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
     fun observeActiveDebts() = debtDao.observeActive()
     fun observeActiveRecoveries() = recoveryDao.observeActive()
     fun observeStats() = statsDao.observe()
+    fun observeOccurrencesForTask(taskId: Long) = occDao.observeForTask(taskId)
 
     suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, Long> {
         val taskId = taskDao.insert(task)
@@ -37,21 +46,59 @@ class TaskRepository(private val db: AppDatabase) {
         return taskId to occId
     }
 
-    suspend fun updateTask(task: TaskEntity) {
-        taskDao.update(task)
+    /**
+     * Deadline task with a date range: creates one occurrence per day.
+     * Each day: scheduledAt = start of day, deadlineAt = end of day (23:59).
+     * Day 1 is unlocked; day N unlocks only after day N-1 is no longer PENDING.
+     */
+    suspend fun createDeadlineTaskWithDays(task: TaskEntity, startMillis: Long, endMillis: Long): Pair<Long, List<Long>> {
+        val taskId = taskDao.insert(task)
+        val occIds = mutableListOf<Long>()
+
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = startMillis
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val endCal = Calendar.getInstance().apply {
+            timeInMillis = endMillis
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 0)
+        }
+        var dayIndex = 1
+        while (cal.timeInMillis <= endCal.timeInMillis && dayIndex <= 120) {
+            val dayStart = cal.timeInMillis
+            val dayEnd = Calendar.getInstance().apply {
+                timeInMillis = dayStart
+                set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val id = occDao.insert(
+                OccurrenceEntity(
+                    taskId = taskId,
+                    scheduledAt = dayStart,
+                    deadlineAt = dayEnd,
+                    durationMinutes = 0,
+                    status = OccurrenceStatus.PENDING
+                )
+            )
+            eventDao.insert(EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED, note = "day_$dayIndex"))
+            occIds.add(id)
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+            dayIndex++
+        }
+        return taskId to occIds
     }
 
-    /** Update task metadata + the latest pending occurrence's time/deadline. */
+    suspend fun updateTask(task: TaskEntity) { taskDao.update(task) }
+
     suspend fun updateTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Long? {
         taskDao.update(task)
         val occ = occDao.getLatestPendingForTask(task.id)
         if (occ != null) {
             occDao.update(
-                occ.copy(
-                    scheduledAt = scheduledAt,
-                    deadlineAt = deadlineAt,
-                    durationMinutes = task.durationMinutes
-                )
+                occ.copy(scheduledAt = scheduledAt, deadlineAt = deadlineAt, durationMinutes = task.durationMinutes)
             )
             eventDao.insert(EventEntity(occurrenceId = occ.id, taskId = task.id, type = EventType.RESCHEDULED))
             return occ.id
@@ -65,6 +112,13 @@ class TaskRepository(private val db: AppDatabase) {
         recoveryDao.deleteByTask(taskId)
         taskDao.archive(taskId)
         eventDao.insert(EventEntity(occurrenceId = 0L, taskId = taskId, type = EventType.DELETED))
+    }
+
+    suspend fun deleteOccurrence(occId: Long) {
+        val occ = occDao.getById(occId) ?: return
+        // Only allow deleting if not the last remaining occurrence
+        eventDao.insert(EventEntity(occurrenceId = occId, taskId = occ.taskId, type = EventType.DELETED))
+        occDao.update(occ.copy(status = OccurrenceStatus.SKIPPED))
     }
 
     suspend fun getOccurrence(id: Long) = occDao.getById(id)
@@ -90,11 +144,8 @@ class TaskRepository(private val db: AppDatabase) {
         statsDao.upsert(newStats)
         eventDao.insert(
             EventEntity(
-                occurrenceId = occId,
-                taskId = task.id,
-                type = EventType.COMPLETED,
-                epDelta = epResult.epGained,
-                healthDelta = epResult.healthGained
+                occurrenceId = occId, taskId = task.id, type = EventType.COMPLETED,
+                epDelta = epResult.epGained, healthDelta = epResult.healthGained
             )
         )
 
@@ -143,27 +194,41 @@ class TaskRepository(private val db: AppDatabase) {
 
     suspend fun applyPenaltiesTick(now: Long = System.currentTimeMillis()): Int {
         val overdue = occDao.getOverdue(now)
-        if (overdue.isEmpty()) return 0
-        val stats = statsDao.get() ?: PlayerStatsEntity()
-        var currentStats = stats
+        val statsBefore = statsDao.get() ?: PlayerStatsEntity()
+        var currentStats = statsBefore
         var chargedCount = 0
 
         for (occ in overdue) {
             val delta = PenaltyEngine.computePenalty(currentStats, occ, now)
             if (delta.minutesCharged > 0) {
-                currentStats = currentStats.copy(ep = delta.newEp, health = delta.newHp, focusLockActive = delta.focusLockActive)
+                currentStats = currentStats.copy(
+                    ep = delta.newEp, health = delta.newHp, focusLockActive = delta.focusLockActive
+                )
                 occDao.update(occ.copy(penaltyAppliedCount = occ.penaltyAppliedCount + delta.minutesCharged))
                 eventDao.insert(
                     EventEntity(
                         occurrenceId = occ.id, taskId = occ.taskId, type = EventType.MISSED,
-                        note = "penalty_tick",
-                        epDelta = -delta.epDrained, healthDelta = -delta.hpDrained
+                        note = "penalty_tick", epDelta = -delta.epDrained, healthDelta = -delta.hpDrained
                     )
                 )
                 chargedCount++
             }
         }
-        if (chargedCount > 0) statsDao.upsert(currentStats)
+        if (chargedCount > 0) {
+            statsDao.upsert(currentStats)
+            notifyIfNeeded(statsBefore, currentStats)
+        }
         return chargedCount
+    }
+
+    private fun notifyIfNeeded(before: PlayerStatsEntity, after: PlayerStatsEntity) {
+        if (before.health >= 50 && after.health < 50) {
+            NotificationHelper.showHealthWarning(appContext, after.health)
+        }
+        if (!lastFocusLockActive && after.focusLockActive) {
+            lastFocusLockActive = true
+            NotificationHelper.showFocusLockActivated(appContext, after.health)
+        }
+        if (after.health >= 55) lastFocusLockActive = false
     }
 }
