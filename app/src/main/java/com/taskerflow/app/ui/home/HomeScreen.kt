@@ -121,8 +121,8 @@ fun HomeScreen(vm: MainViewModel) {
                     modifier = Modifier.weight(1f),
                     value = GamificationEngine.levelProgress(stats.ep).first,
                     maxValue = 90,
-                    numberText = "${stats.ep}",
-                    label = "ENERGY (EP)",
+                    numberText = "${GamificationEngine.levelProgress(stats.ep).first} / 90",
+                    label = "EP • LVL ${stats.level}",
                     statusText = when {
                         stats.ep >= 100 -> "Surge Active"
                         stats.ep >= 50 -> "Charged"
@@ -171,7 +171,7 @@ fun HomeScreen(vm: MainViewModel) {
                             timeText = formatTime(occ.scheduledAt),
                             epText = "+${task.difficulty.epReward} EP",
                             status = occ.status,
-                            onComplete = { vm.completeOccurrence(occ.id) }
+                            onComplete = null
                         )
                     }
                     items(deadlineTasks, key = { "dl_${it.first.id}" }) { (task, occs) ->
@@ -180,7 +180,8 @@ fun HomeScreen(vm: MainViewModel) {
                             category = task.category.name,
                             occurrences = occs,
                             epReward = task.difficulty.epReward,
-                            onCompleteDay = { occId -> vm.completeOccurrence(occId) }
+                            readOnly = true,
+                            onCompleteDay = { }
                         )
                     }
                 }

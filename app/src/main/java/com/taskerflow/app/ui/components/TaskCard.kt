@@ -29,7 +29,7 @@ fun TaskCard(
     timeText: String,
     epText: String,
     status: OccurrenceStatus,
-    onClick: () -> Unit = {},
+    onClick: (() -> Unit)? = null,
     onComplete: (() -> Unit)? = null
 ) {
     val style = cardStyle(status)
@@ -49,7 +49,7 @@ fun TaskCard(
             .padding(vertical = 5.dp)
             .scale(scale)
             .border(1.dp, style.border, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
+            .clickable(enabled = onClick != null) { onClick?.invoke() }
     ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 14.dp),

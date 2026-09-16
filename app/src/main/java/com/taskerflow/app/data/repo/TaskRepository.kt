@@ -4,7 +4,6 @@ import android.content.Context
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.model.*
 import com.taskerflow.app.domain.GamificationEngine
-import com.taskerflow.app.domain.GameConstants
 import com.taskerflow.app.domain.PenaltyEngine
 import com.taskerflow.app.worker.NotificationHelper
 import kotlinx.coroutines.flow.Flow
@@ -12,6 +11,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.max
 
 class TaskRepository(
     private val db: AppDatabase,
@@ -26,8 +26,6 @@ class TaskRepository(
     private val statsDao = db.playerStatsDao()
 
     private var lastFocusLockActive = false
-
-    // Repository-level save guard (prevents double-tap duplicate insert)
     private val saveInFlight = AtomicBoolean(false)
 
     fun observeTasks(): Flow<List<TaskEntity>> = taskDao.observeActive()
@@ -72,11 +70,10 @@ class TaskRepository(
             val (from, to) = if (startDate.isAfter(endDate)) endDate to startDate else startDate to endDate
             val totalDays = ChronoUnit.DAYS.between(from, to).toInt() + 1
 
-            // EP reward per day: <=7d = 10, <=31d = 15, else 20
             val diff = when {
-                totalDays <= 7 -> Difficulty.NORMAL      // 10
-                totalDays <= 31 -> Difficulty.HARD       // 15
-                else -> Difficulty.EXTREME               // 20
+                totalDays <= 7 -> Difficulty.EASY       // 5
+                totalDays <= 31 -> Difficulty.NORMAL    // 10
+                else -> Difficulty.HARD                 // 15
             }
 
             val taskId = taskDao.insert(task.copy(difficulty = diff))
@@ -142,14 +139,19 @@ class TaskRepository(
     suspend fun getTask(id: Long) = taskDao.getById(id)
     suspend fun getLatestOccurrenceForTask(taskId: Long) = occDao.getLatestForTask(taskId)
     suspend fun getAllPendingOccurrences(): List<OccurrenceEntity> = occDao.getAllPending()
+    suspend fun countMissed(): Int = occDao.countMissed()
 
     /**
-     * Mark an occurrence as completed and award EP/HP once.
-     * No-op if already COMPLETED or LATE.
+     * Complete an occurrence.
+     *
+     * Reward rules:
+     * - Normal: base EP for the task, HP += floor(epGained / 5)
+     * - Recovery mode (health < 50 AND there are other MISSED occurrences):
+     *   EP → forced cycle fill (→ level up)
+     *   HP  → refill share: (100 - health) / pendingRecoveryCount
      */
     suspend fun completeOccurrence(occId: Long, completedAt: Long = System.currentTimeMillis()): Boolean {
         val occ = occDao.getById(occId) ?: return false
-        // guard: already done
         if (occ.status == OccurrenceStatus.COMPLETED ||
             occ.status == OccurrenceStatus.LATE ||
             occ.status == OccurrenceStatus.RECOVERED) return false
@@ -159,7 +161,29 @@ class TaskRepository(
 
         val minutesLate = ((completedAt - occ.deadlineAt) / 60000L).toInt()
         val baseEp = task.difficulty.epReward
-        val (newStats, epResult) = GamificationEngine.applyCompletion(stats, baseEp, minutesLate)
+
+        val recoveryMode = stats.health < 50
+        val missedCount = occDao.countMissed().coerceAtLeast(1)
+
+        val hpOverride: Int?
+        val forceFill: Boolean
+        if (recoveryMode) {
+            // HP gain: split the deficit across remaining missed tasks
+            val deficit = (100 - stats.health)
+            hpOverride = (deficit / missedCount).coerceAtLeast(1)
+            forceFill = true
+        } else {
+            hpOverride = null
+            forceFill = false
+        }
+
+        val (newStats, epResult) = GamificationEngine.applyCompletion(
+            stats = stats,
+            baseEp = baseEp,
+            minutesLate = minutesLate,
+            hpOverride = hpOverride,
+            forceCycleFill = forceFill
+        )
 
         occDao.update(
             occ.copy(
@@ -192,11 +216,6 @@ class TaskRepository(
         return true
     }
 
-    /**
-     * Reverse a completion: uncheck a completed day-task.
-     * Subtracts the EP it earned, reverses HP milestones, and resets status to PENDING.
-     * No-op if not currently COMPLETED/LATE/RECOVERED.
-     */
     suspend fun uncompleteOccurrence(occId: Long): Boolean {
         val occ = occDao.getById(occId) ?: return false
         if (occ.status != OccurrenceStatus.COMPLETED &&
@@ -206,24 +225,27 @@ class TaskRepository(
         val task = taskDao.getById(occ.taskId) ?: return false
         val stats = statsDao.get() ?: PlayerStatsEntity()
 
-        // Look up the EP that was awarded for this completion event
         val events = eventDao.recentForOccurrence(occId)
         val completionEvent = events.firstOrNull { it.type == EventType.COMPLETED }
         val epAwarded = completionEvent?.epDelta ?: 0
         val hpAwarded = completionEvent?.healthDelta ?: 0
 
-        val newEp = (stats.ep - epAwarded).coerceAtLeast(0)
-        val newHp = (stats.health - hpAwarded).coerceAtLeast(0)
+        // Rollback EP cycle-aware
+        var newEp = stats.ep - epAwarded
+        var newLevel = stats.level
+        while (newEp < 0 && newLevel > 1) {
+            newLevel--
+            newEp += 90
+        }
+        newEp = newEp.coerceAtLeast(0)
 
-        // Recompute highestEpMilestone from new EP
-        val newMilestone = newEp / GameConstants.EP_PER_HEALTH_TICK
+        val newHp = (stats.health - hpAwarded).coerceIn(0, 100)
 
         val newStats = stats.copy(
             ep = newEp,
             health = newHp,
-            highestEpMilestone = newMilestone,
-            totalCompleted = (stats.totalCompleted - 1).coerceAtLeast(0),
-            level = GamificationEngine.computeLevel(newEp)
+            level = newLevel,
+            totalCompleted = (stats.totalCompleted - 1).coerceAtLeast(0)
         )
         statsDao.upsert(newStats)
 

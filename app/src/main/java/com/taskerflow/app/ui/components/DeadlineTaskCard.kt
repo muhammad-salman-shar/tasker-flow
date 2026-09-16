@@ -109,6 +109,7 @@ fun DeadlineTaskCard(
     epReward: Int,
     onCompleteDay: (Long) -> Unit,
     onDayTap: (Long) -> Unit = {},
+    readOnly: Boolean = false,
     onMenuClick: () -> Unit = {}
 ) {
     val sorted = remember(occurrences) { occurrences.sortedBy { it.scheduledAt } }
@@ -185,7 +186,7 @@ fun DeadlineTaskCard(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(2.dp))
-                    IconButton(onClick = onMenuClick, modifier = Modifier.size(22.dp)) {
+                    if (!readOnly) IconButton(onClick = onMenuClick, modifier = Modifier.size(22.dp)) {
                         Icon(Icons.Filled.MoreVert, null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(20.dp))
                     }
                     Icon(
@@ -331,7 +332,7 @@ private fun WeekBlock(
                 dateLabel = day.dateLabel,
                 occ = day.occ,
                 accent = colors.accent,
-                onComplete = { onCompleteDay(day.occ.id) },
+                onComplete = { if (!readOnly) onCompleteDay(day.occ.id) },
                 onTap = { onDayTap(day.occ.id) }
             )
         }
