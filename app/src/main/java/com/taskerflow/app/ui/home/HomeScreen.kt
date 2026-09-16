@@ -54,7 +54,7 @@ fun HomeScreen(vm: MainViewModel) {
     val activeOccs = state.allOccurrences.filter {
         it.status != OccurrenceStatus.COMPLETED &&
         it.status != OccurrenceStatus.LATE &&
-        it.status != OccurrenceStatus.RECOVERED &&
+        it.status != OccurrenceStatus.RECOVERED
     }
 
     // Group by task
