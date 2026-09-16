@@ -71,29 +71,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeOccurrencesForTask(taskId)
 
     fun completeOccurrence(id: Long) = viewModelScope.launch { repo.completeOccurrence(id) }
+    fun uncompleteOccurrence(id: Long) = viewModelScope.launch { repo.uncompleteOccurrence(id) }
 
-    // ---- SAVE-AND-NAVIGATE variants (suspend, return after DB commit) ----
+    /**
+     * Suspend save — caller awaits DB commit, then navigates.
+     * Returns true if saved, false if duplicate (in-flight).
+     */
     suspend fun saveTaskAndWait(
         task: TaskEntity,
         scheduledAt: Long,
         deadlineAt: Long,
         isDeadline: Boolean,
         deadlineEndMillis: Long
-    ) {
-        if (isDeadline) {
-            val (_, occIds) = repo.createDeadlineTaskWithDays(task, scheduledAt, deadlineEndMillis)
+    ): Boolean {
+        return if (isDeadline) {
+            val result = repo.createDeadlineTaskWithDays(task, scheduledAt, deadlineEndMillis)
+                ?: return false
+            val (_, occIds) = result
             occIds.firstOrNull()?.let { firstOcc ->
                 AlarmScheduler.scheduleReminder(
                     ctx = appCtx, occurrenceId = firstOcc, triggerAt = scheduledAt,
                     title = task.title, epReward = task.difficulty.epReward
                 )
             }
+            true
         } else {
-            val (_, occId) = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
+            val result = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
+                ?: return false
+            val (_, occId) = result
             AlarmScheduler.scheduleReminder(
                 ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
                 title = task.title, epReward = task.difficulty.epReward
             )
+            true
         }
     }
 

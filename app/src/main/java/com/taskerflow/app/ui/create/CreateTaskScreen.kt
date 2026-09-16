@@ -42,6 +42,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
     var isDeadline by remember { mutableStateOf(false) }
     var durationMinStr by remember { mutableStateOf("30") }
     var error by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(!isEdit) }
 
     val defaultStart = remember {
@@ -287,19 +288,22 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                             repeatRule = RepeatRule.NEVER,
                             durationMinutes = dur
                         )
+                        if (isSaving) return@clickable
+                        isSaving = true
                         scope.launch {
                             if (isEdit) {
                                 vm.updateTaskAndWait(task, scheduledAt, finalDeadline)
+                                onBack()
                             } else {
-                                vm.saveTaskAndWait(
+                                val saved = vm.saveTaskAndWait(
                                     task = task,
                                     scheduledAt = scheduledAt,
                                     deadlineAt = finalDeadline,
                                     isDeadline = isDeadline,
                                     deadlineEndMillis = deadlineAt
                                 )
+                                if (saved) onBack() else isSaving = false
                             }
-                            onBack()
                         }
                     },
                 contentAlignment = Alignment.Center

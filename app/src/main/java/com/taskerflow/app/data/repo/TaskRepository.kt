@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class TaskRepository(
     private val db: AppDatabase,
@@ -26,6 +27,9 @@ class TaskRepository(
 
     private var lastFocusLockActive = false
 
+    // Repository-level save guard (prevents double-tap duplicate insert)
+    private val saveInFlight = AtomicBoolean(false)
+
     fun observeTasks(): Flow<List<TaskEntity>> = taskDao.observeActive()
     fun observeOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
     fun observeAllOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
@@ -34,77 +38,75 @@ class TaskRepository(
     fun observeStats() = statsDao.observe()
     fun observeOccurrencesForTask(taskId: Long) = occDao.observeForTask(taskId)
 
-    suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, Long> {
-        // Day/scheduled task always uses fixed 5 EP reward
-        val fixedTask = task.copy(difficulty = Difficulty.EASY) // EASY == 5 EP
-        val taskId = taskDao.insert(fixedTask)
-        val occId = occDao.insert(
-            OccurrenceEntity(
-                taskId = taskId,
-                scheduledAt = scheduledAt,
-                deadlineAt = deadlineAt,
-                durationMinutes = task.durationMinutes,
-                status = OccurrenceStatus.PENDING
+    suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, Long>? {
+        if (!saveInFlight.compareAndSet(false, true)) return null
+        try {
+            val fixedTask = task.copy(difficulty = Difficulty.EASY) // Day task = 5 EP
+            val taskId = taskDao.insert(fixedTask)
+            val occId = occDao.insert(
+                OccurrenceEntity(
+                    taskId = taskId,
+                    scheduledAt = scheduledAt,
+                    deadlineAt = deadlineAt,
+                    durationMinutes = task.durationMinutes,
+                    status = OccurrenceStatus.PENDING
+                )
             )
-        )
-        eventDao.insert(EventEntity(occurrenceId = occId, taskId = taskId, type = EventType.CREATED))
-        return taskId to occId
+            eventDao.insert(EventEntity(occurrenceId = occId, taskId = taskId, type = EventType.CREATED))
+            return taskId to occId
+        } finally {
+            saveInFlight.set(false)
+        }
     }
 
-    /**
-     * Deadline task with a date range.
-     * Difficulty (EP per day) scaled by range length:
-     *   SHORT (<=31 days): 10 EP/day
-     *   MEDIUM (<=365 days): 15 EP/day
-     *   LONG (>365 days): 20 EP/day
-     */
     suspend fun createDeadlineTaskWithDays(
         task: TaskEntity,
         startMillis: Long,
         endMillis: Long
-    ): Pair<Long, List<Long>> {
-        val zone = ZoneId.systemDefault()
-        val startDate = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
-        val endDate = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
-        val (from, to) = if (startDate.isAfter(endDate)) endDate to startDate else startDate to endDate
-        val totalDays = ChronoUnit.DAYS.between(from, to).toInt() + 1
+    ): Pair<Long, List<Long>>? {
+        if (!saveInFlight.compareAndSet(false, true)) return null
+        try {
+            val zone = ZoneId.systemDefault()
+            val startDate = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
+            val endDate = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
+            val (from, to) = if (startDate.isAfter(endDate)) endDate to startDate else startDate to endDate
+            val totalDays = ChronoUnit.DAYS.between(from, to).toInt() + 1
 
-        val scale = when {
-            totalDays <= 31 -> DeadlineScale.SHORT
-            totalDays <= 365 -> DeadlineScale.MEDIUM
-            else -> DeadlineScale.LONG
-        }
-        val diff = when (scale) {
-            DeadlineScale.SHORT -> Difficulty.NORMAL       // 10 EP
-            DeadlineScale.MEDIUM -> Difficulty.HARD        // 15 EP
-            DeadlineScale.LONG -> Difficulty.EXTREME       // 20 EP
-        }
+            // EP reward per day: <=7d = 10, <=31d = 15, else 20
+            val diff = when {
+                totalDays <= 7 -> Difficulty.NORMAL      // 10
+                totalDays <= 31 -> Difficulty.HARD       // 15
+                else -> Difficulty.EXTREME               // 20
+            }
 
-        val taskId = taskDao.insert(task.copy(difficulty = diff))
-        val occIds = mutableListOf<Long>()
+            val taskId = taskDao.insert(task.copy(difficulty = diff))
+            val occIds = mutableListOf<Long>()
 
-        var current = from
-        var dayIndex = 1
-        while (!current.isAfter(to) && dayIndex <= 3650) {
-            val dayStart = current.atStartOfDay(zone).toInstant().toEpochMilli()
-            val dayEnd = current.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-            val id = occDao.insert(
-                OccurrenceEntity(
-                    taskId = taskId,
-                    scheduledAt = dayStart,
-                    deadlineAt = dayEnd,
-                    durationMinutes = 0,
-                    status = OccurrenceStatus.PENDING
+            var current = from
+            var dayIndex = 1
+            while (!current.isAfter(to) && dayIndex <= 3650) {
+                val dayStart = current.atStartOfDay(zone).toInstant().toEpochMilli()
+                val dayEnd = current.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+                val id = occDao.insert(
+                    OccurrenceEntity(
+                        taskId = taskId,
+                        scheduledAt = dayStart,
+                        deadlineAt = dayEnd,
+                        durationMinutes = 0,
+                        status = OccurrenceStatus.PENDING
+                    )
                 )
-            )
-            eventDao.insert(
-                EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED, note = "day_$dayIndex")
-            )
-            occIds.add(id)
-            current = current.plusDays(1)
-            dayIndex++
+                eventDao.insert(
+                    EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED, note = "day_$dayIndex")
+                )
+                occIds.add(id)
+                current = current.plusDays(1)
+                dayIndex++
+            }
+            return taskId to occIds
+        } finally {
+            saveInFlight.set(false)
         }
-        return taskId to occIds
     }
 
     suspend fun updateTask(task: TaskEntity) { taskDao.update(task) }
@@ -141,8 +143,17 @@ class TaskRepository(
     suspend fun getLatestOccurrenceForTask(taskId: Long) = occDao.getLatestForTask(taskId)
     suspend fun getAllPendingOccurrences(): List<OccurrenceEntity> = occDao.getAllPending()
 
+    /**
+     * Mark an occurrence as completed and award EP/HP once.
+     * No-op if already COMPLETED or LATE.
+     */
     suspend fun completeOccurrence(occId: Long, completedAt: Long = System.currentTimeMillis()): Boolean {
         val occ = occDao.getById(occId) ?: return false
+        // guard: already done
+        if (occ.status == OccurrenceStatus.COMPLETED ||
+            occ.status == OccurrenceStatus.LATE ||
+            occ.status == OccurrenceStatus.RECOVERED) return false
+
         val task = taskDao.getById(occ.taskId) ?: return false
         val stats = statsDao.get() ?: PlayerStatsEntity()
 
@@ -178,6 +189,57 @@ class TaskRepository(
                 )
             }
         }
+        return true
+    }
+
+    /**
+     * Reverse a completion: uncheck a completed day-task.
+     * Subtracts the EP it earned, reverses HP milestones, and resets status to PENDING.
+     * No-op if not currently COMPLETED/LATE/RECOVERED.
+     */
+    suspend fun uncompleteOccurrence(occId: Long): Boolean {
+        val occ = occDao.getById(occId) ?: return false
+        if (occ.status != OccurrenceStatus.COMPLETED &&
+            occ.status != OccurrenceStatus.LATE &&
+            occ.status != OccurrenceStatus.RECOVERED) return false
+
+        val task = taskDao.getById(occ.taskId) ?: return false
+        val stats = statsDao.get() ?: PlayerStatsEntity()
+
+        // Look up the EP that was awarded for this completion event
+        val events = eventDao.recentForOccurrence(occId)
+        val completionEvent = events.firstOrNull { it.type == EventType.COMPLETED }
+        val epAwarded = completionEvent?.epDelta ?: 0
+        val hpAwarded = completionEvent?.healthDelta ?: 0
+
+        val newEp = (stats.ep - epAwarded).coerceAtLeast(0)
+        val newHp = (stats.health - hpAwarded).coerceAtLeast(0)
+
+        // Recompute highestEpMilestone from new EP
+        val newMilestone = newEp / GameConstants.EP_PER_HEALTH_TICK
+
+        val newStats = stats.copy(
+            ep = newEp,
+            health = newHp,
+            highestEpMilestone = newMilestone,
+            totalCompleted = (stats.totalCompleted - 1).coerceAtLeast(0),
+            level = GamificationEngine.computeLevel(newEp)
+        )
+        statsDao.upsert(newStats)
+
+        occDao.update(
+            occ.copy(
+                status = OccurrenceStatus.PENDING,
+                completedAt = null,
+                penaltyAppliedCount = 0
+            )
+        )
+        eventDao.insert(
+            EventEntity(
+                occurrenceId = occId, taskId = task.id, type = EventType.RESCHEDULED,
+                note = "uncheck", epDelta = -epAwarded, healthDelta = -hpAwarded
+            )
+        )
         return true
     }
 
