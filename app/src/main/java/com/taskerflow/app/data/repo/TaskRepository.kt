@@ -2,6 +2,7 @@ package com.taskerflow.app.data.repo
 
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.model.*
+import com.taskerflow.app.domain.GamificationEngine
 import kotlinx.coroutines.flow.Flow
 
 class TaskRepository(private val db: AppDatabase) {
@@ -15,6 +16,7 @@ class TaskRepository(private val db: AppDatabase) {
 
     fun observeTasks(): Flow<List<TaskEntity>> = taskDao.observeActive()
     fun observeOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
+    fun observeAllOccurrences(from: Long, to: Long) = occDao.observeRange(from, to)
     fun observeActiveDebts() = debtDao.observeActive()
     fun observeActiveRecoveries() = recoveryDao.observeActive()
     fun observeStats() = statsDao.observe()
@@ -34,6 +36,18 @@ class TaskRepository(private val db: AppDatabase) {
         return taskId to occId
     }
 
+    suspend fun updateTask(task: TaskEntity) {
+        taskDao.update(task)
+    }
+
+    suspend fun deleteTask(taskId: Long) {
+        // archive instead of hard-delete (anti-exploit)
+        taskDao.archive(taskId)
+        eventDao.insert(
+            EventEntity(occurrenceId = 0L, taskId = taskId, type = EventType.DELETED)
+        )
+    }
+
     suspend fun getOccurrence(id: Long) = occDao.getById(id)
     suspend fun getTask(id: Long) = taskDao.getById(id)
 
@@ -44,8 +58,7 @@ class TaskRepository(private val db: AppDatabase) {
 
         val minutesLate = ((completedAt - occ.deadlineAt) / 60000L).toInt()
         val baseEp = task.difficulty.epReward
-        val (newStats, epResult) = com.taskerflow.app.domain.GamificationEngine
-            .applyCompletion(stats, baseEp, minutesLate)
+        val (newStats, epResult) = GamificationEngine.applyCompletion(stats, baseEp, minutesLate)
 
         occDao.update(
             occ.copy(
@@ -64,7 +77,6 @@ class TaskRepository(private val db: AppDatabase) {
             )
         )
 
-        // resolve debt if any
         debtDao.getActiveForOccurrence(occId)?.let {
             debtDao.update(it.copy(resolved = true, resolvedAt = completedAt))
             val active = recoveryDao.getActive()
@@ -87,7 +99,7 @@ class TaskRepository(private val db: AppDatabase) {
         if (occ.status != OccurrenceStatus.PENDING) return false
         occDao.update(occ.copy(status = OccurrenceStatus.MISSED))
         val stats = statsDao.get() ?: PlayerStatsEntity()
-        statsDao.upsert(com.taskerflow.app.domain.GamificationEngine.applyMiss(stats))
+        statsDao.upsert(GamificationEngine.applyMiss(stats))
         debtDao.insert(
             TaskDebtEntity(
                 taskId = occ.taskId,

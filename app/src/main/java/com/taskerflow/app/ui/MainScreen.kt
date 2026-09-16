@@ -10,7 +10,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.*
+import androidx.navigation.navArgument
 import com.taskerflow.app.ui.create.CreateTaskScreen
 import com.taskerflow.app.ui.home.HomeScreen
 import com.taskerflow.app.ui.me.MeScreen
@@ -25,6 +27,7 @@ sealed class Tab(val route: String, val label: String, val icon: ImageVector) {
 }
 
 const val ROUTE_CREATE = "create"
+const val ROUTE_EDIT = "edit/{taskId}"
 
 @Composable
 fun MainScreen(vm: MainViewModel) {
@@ -33,14 +36,14 @@ fun MainScreen(vm: MainViewModel) {
     val backStack by nav.currentBackStackEntryAsState()
     val currentDest = backStack?.destination
     val currentRoute = currentDest?.route
-    val showFab = currentRoute != ROUTE_CREATE
+    val showFab = currentRoute != ROUTE_CREATE && (currentRoute?.startsWith("edit/") != true)
 
     Scaffold(
         floatingActionButton = {
             if (showFab) {
                 FloatingActionButton(
                     onClick = { nav.navigate(ROUTE_CREATE) },
-                    containerColor = Color(0xFFFFC107),
+                    containerColor = Color(0xFFFFB300),
                     contentColor = Color.Black
                 ) {
                     Icon(Icons.Filled.Add, "New Task")
@@ -48,7 +51,7 @@ fun MainScreen(vm: MainViewModel) {
             }
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = Color(0xFF0E1018)) {
                 tabs.forEach { tab ->
                     NavigationBarItem(
                         selected = currentDest?.hierarchy?.any { it.route == tab.route } == true,
@@ -72,10 +75,26 @@ fun MainScreen(vm: MainViewModel) {
             modifier = Modifier.padding(padding)
         ) {
             composable(Tab.Home.route) { HomeScreen(vm) }
-            composable(Tab.Tasks.route) { TasksScreen(vm) }
+            composable(Tab.Tasks.route) {
+                TasksScreen(
+                    vm = vm,
+                    onEdit = { taskId -> nav.navigate("edit/$taskId") }
+                )
+            }
             composable(Tab.Stats.route) { StatsScreen(vm) }
             composable(Tab.Me.route) { MeScreen(vm) }
-            composable(ROUTE_CREATE) { CreateTaskScreen(vm) { nav.popBackStack() } }
+            composable(ROUTE_CREATE) { CreateTaskScreen(vm, onBack = { nav.popBackStack() }) }
+            composable(
+                route = ROUTE_EDIT,
+                arguments = listOf(navArgument("taskId") { type = NavType.LongType })
+            ) { entry ->
+                val taskId = entry.arguments?.getLong("taskId") ?: -1L
+                CreateTaskScreen(
+                    vm = vm,
+                    onBack = { nav.popBackStack() },
+                    editingTaskId = taskId
+                )
+            }
         }
     }
 }

@@ -28,16 +28,21 @@ import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
+fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long? = null) {
     val ctx = LocalContext.current
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(Category.CODING) }
-    var priority by remember { mutableStateOf(Priority.MEDIUM) }
-    var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
-    var isDeadline by remember { mutableStateOf(false) }
-    var repeatRule by remember { mutableStateOf(RepeatRule.NEVER) }
-    var durationMin by remember { mutableStateOf(30) }
+    val existing = remember(editingTaskId) {
+        if (editingTaskId != null && editingTaskId > 0) vm.getTaskById(editingTaskId) else null
+    }
+
+    var title by remember { mutableStateOf(existing?.title ?: "") }
+    var description by remember { mutableStateOf(existing?.description ?: "") }
+    var category by remember { mutableStateOf(existing?.category ?: Category.CODING) }
+    var priority by remember { mutableStateOf(existing?.priority ?: Priority.MEDIUM) }
+    var difficulty by remember { mutableStateOf(existing?.difficulty ?: Difficulty.NORMAL) }
+    var isDeadline by remember {
+        mutableStateOf(existing?.taskType == TaskType.DEADLINE)
+    }
+    var durationMin by remember { mutableStateOf(existing?.durationMinutes ?: 30) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val cal = remember {
@@ -63,7 +68,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Quest", fontWeight = FontWeight.Black) },
+                title = { Text(if (editingTaskId != null) "Edit Quest" else "New Quest", fontWeight = FontWeight.Black) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }
                 },
@@ -84,7 +89,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
         ) {
             Spacer(Modifier.height(4.dp))
 
-            // Title
             Label("Title")
             OutlinedTextField(
                 value = title,
@@ -96,7 +100,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
                     focusedBorderColor = Color(0xFFFFB300),
                     unfocusedBorderColor = Color(0xFF23232B),
                     focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Color(0xFFFFB300)
                 )
             )
 
@@ -111,29 +116,29 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
                     focusedBorderColor = Color(0xFFFFB300),
                     unfocusedBorderColor = Color(0xFF23232B),
                     focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedTextColor = Color.White,
+                    cursorColor = Color(0xFFFFB300)
                 )
             )
 
             Spacer(Modifier.height(14.dp))
 
-            // Inline trio: Category / Priority / Difficulty
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactDropdown(
+                SimpleDropdown(
                     modifier = Modifier.weight(1f),
                     label = "Category",
                     selected = category,
                     options = Category.values().toList(),
                     labelFn = { it.name.take(6) }
                 ) { category = it }
-                CompactDropdown(
+                SimpleDropdown(
                     modifier = Modifier.weight(1f),
                     label = "Priority",
                     selected = priority,
                     options = Priority.values().toList(),
                     labelFn = { it.name.take(6) }
                 ) { priority = it }
-                CompactDropdown(
+                SimpleDropdown(
                     modifier = Modifier.weight(1f),
                     label = "Difficulty",
                     selected = difficulty,
@@ -144,7 +149,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
 
             Spacer(Modifier.height(14.dp))
 
-            // Segmented: Day Task / Deadline
             Label("Task Type")
             Row(
                 Modifier
@@ -203,7 +207,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
                         focusedBorderColor = Color(0xFFFFB300),
                         unfocusedBorderColor = Color(0xFF23232B),
                         focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFFFFB300)
                     )
                 )
             } else {
@@ -254,13 +259,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
-            Label("Repeat")
-            DropdownFullWidth(
-                selected = repeatRule,
-                options = RepeatRule.values().toList()
-            ) { repeatRule = it }
-
             error?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(it, color = Color(0xFFFF3D57), fontSize = 13.sp)
@@ -268,7 +266,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
 
             Spacer(Modifier.height(20.dp))
 
-            // Create button
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -278,26 +275,29 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit) {
                     .clickable {
                         if (title.isBlank()) { error = "Title required"; return@clickable }
                         val finalDeadline = if (isDeadline) deadlineAt else scheduledAt + durationMin * 60_000L
-                        vm.createTask(
-                            TaskEntity(
-                                title = title.trim(),
-                                description = description.trim(),
-                                category = category,
-                                priority = priority,
-                                taskType = if (isDeadline) TaskType.DEADLINE else TaskType.SCHEDULED,
-                                difficulty = difficulty,
-                                repeatRule = repeatRule,
-                                durationMinutes = durationMin
-                            ),
-                            scheduledAt = scheduledAt,
-                            deadlineAt = finalDeadline
+                        val task = TaskEntity(
+                            id = existing?.id ?: 0L,
+                            title = title.trim(),
+                            description = description.trim(),
+                            category = category,
+                            priority = priority,
+                            taskType = if (isDeadline) TaskType.DEADLINE else TaskType.SCHEDULED,
+                            difficulty = difficulty,
+                            repeatRule = RepeatRule.NEVER,
+                            durationMinutes = durationMin
                         )
+                        if (existing != null) {
+                            vm.updateTask(task)
+                        } else {
+                            vm.createTask(task, scheduledAt = scheduledAt, deadlineAt = finalDeadline)
+                        }
                         onBack()
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "CREATE TASK  •  +${difficulty.epReward} EP",
+                    if (editingTaskId != null) "UPDATE TASK  •  +${difficulty.epReward} EP"
+                    else "CREATE TASK  •  +${difficulty.epReward} EP",
                     color = Color.Black,
                     fontWeight = FontWeight.Black,
                     fontSize = 14.sp,
@@ -358,9 +358,8 @@ private fun PickerBtn(modifier: Modifier, text: String, onClick: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T> CompactDropdown(
+private fun <T> SimpleDropdown(
     modifier: Modifier = Modifier,
     label: String,
     selected: T,
@@ -378,7 +377,7 @@ private fun <T> CompactDropdown(
             letterSpacing = 1.sp,
             modifier = Modifier.padding(bottom = 4.dp, start = 2.dp)
         )
-        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        Box {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -391,45 +390,17 @@ private fun <T> CompactDropdown(
             ) {
                 Text(labelFn(selected), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
-            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                containerColor = Color(0xFF1C1C24)
+            ) {
                 options.forEach { opt ->
                     DropdownMenuItem(
-                        text = { Text(labelFn(opt)) },
+                        text = { Text(labelFn(opt), color = Color.White) },
                         onClick = { onSelect(opt); expanded = false }
                     )
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun <T> DropdownFullWidth(
-    selected: T,
-    options: List<T>,
-    onSelect: (T) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF14141A))
-                .clickable { expanded = true }
-                .padding(horizontal = 14.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(selected.toString(), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        }
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(opt.toString()) },
-                    onClick = { onSelect(opt); expanded = false }
-                )
             }
         }
     }

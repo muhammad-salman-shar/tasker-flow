@@ -13,6 +13,7 @@ import java.util.Calendar
 data class HomeUiState(
     val stats: PlayerStatsEntity = PlayerStatsEntity(),
     val todayOccurrences: List<OccurrenceEntity> = emptyList(),
+    val allOccurrences: List<OccurrenceEntity> = emptyList(),
     val tasksById: Map<Long, TaskEntity> = emptyMap(),
     val activeDebts: List<TaskDebtEntity> = emptyList(),
     val activeRecoveries: List<RecoveryQuestEntity> = emptyList()
@@ -32,16 +33,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         start to c.timeInMillis
     }
 
+    // Wide range for tasks list (30 days back, 30 days forward)
+    private val wideRange: Pair<Long, Long> = run {
+        val c = Calendar.getInstance()
+        val end = c.timeInMillis + 30L * 24 * 3600 * 1000
+        val start = c.timeInMillis - 30L * 24 * 3600 * 1000
+        start to end
+    }
+
     val homeState: StateFlow<HomeUiState> = combine(
         _stats.filterNotNull(),
         repo.observeOccurrences(todayRange.first, todayRange.second),
+        repo.observeAllOccurrences(wideRange.first, wideRange.second),
         repo.observeTasks(),
         repo.observeActiveDebts(),
         repo.observeActiveRecoveries()
-    ) { stats, occs, tasks, debts, recoveries ->
+    ) { arr ->
+        @Suppress("UNCHECKED_CAST")
+        val stats = arr[0] as PlayerStatsEntity
+        val today = arr[1] as List<OccurrenceEntity>
+        val all = arr[2] as List<OccurrenceEntity>
+        val tasks = arr[3] as List<TaskEntity>
+        val debts = arr[4] as List<TaskDebtEntity>
+        val recoveries = arr[5] as List<RecoveryQuestEntity>
         HomeUiState(
             stats = stats,
-            todayOccurrences = occs,
+            todayOccurrences = today,
+            allOccurrences = all,
             tasksById = tasks.associateBy { it.id },
             activeDebts = debts,
             activeRecoveries = recoveries
@@ -54,6 +72,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
     }
 
+    fun updateTask(task: TaskEntity) = viewModelScope.launch { repo.updateTask(task) }
+
+    fun deleteTask(taskId: Long) = viewModelScope.launch { repo.deleteTask(taskId) }
+
     fun snoozeOccurrence(id: Long, minutes: Int) = viewModelScope.launch {
         val occ = repo.getOccurrence(id) ?: return@launch
         val newSched = occ.scheduledAt + minutes * 60_000L
@@ -61,8 +83,5 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.snoozeOccurrence(id, newSched, newDeadline)
     }
 
-    fun levelProgress(): Pair<Int, Int> {
-        val ep = homeState.value.stats.ep
-        return GamificationEngine.levelProgress(ep)
-    }
+    fun getTaskById(id: Long): TaskEntity? = homeState.value.tasksById[id]
 }
