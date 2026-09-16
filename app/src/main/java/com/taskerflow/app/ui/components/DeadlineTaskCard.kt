@@ -23,10 +23,87 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taskerflow.app.data.model.DeadlineScale
 import com.taskerflow.app.data.model.OccurrenceEntity
 import com.taskerflow.app.data.model.OccurrenceStatus
 import java.text.SimpleDateFormat
-import java.util.*
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.time.temporal.ChronoUnit
+import java.util.Locale
+
+// ---- Data tree ----
+
+private data class DayNode(
+    val index: Int,
+    val occ: OccurrenceEntity,
+    val dateLabel: String
+)
+
+private data class WeekNode(
+    val label: String,
+    val days: List<DayNode>
+) {
+    val doneCount get() = days.count { it.occ.status.isDone() }
+    val total get() = days.size
+    val complete get() = doneCount == total && total > 0
+}
+
+private data class MonthNode(
+    val label: String,
+    val weeks: List<WeekNode>
+) {
+    val doneCount get() = weeks.sumOf { it.doneCount }
+    val total get() = weeks.sumOf { it.total }
+    val complete get() = doneCount == total && total > 0
+}
+
+private data class YearNode(
+    val label: String,
+    val months: List<MonthNode>
+) {
+    val doneCount get() = months.sumOf { it.doneCount }
+    val total get() = months.sumOf { it.total }
+    val complete get() = doneCount == total && total > 0
+}
+
+private fun OccurrenceStatus.isDone(): Boolean =
+    this == OccurrenceStatus.COMPLETED ||
+    this == OccurrenceStatus.LATE ||
+    this == OccurrenceStatus.RECOVERED
+
+// ---- Colors per scale ----
+
+private data class ScaleColors(
+    val accent: Color,
+    val bg: Color,
+    val border: Color,
+    val tag: String
+)
+
+private fun colorsFor(scale: DeadlineScale): ScaleColors = when (scale) {
+    DeadlineScale.SHORT -> ScaleColors(
+        accent = Color(0xFFFFB300),
+        bg = Color(0xFF1E1A0F),
+        border = Color(0xFF5C4600),
+        tag = "WEEKLY"
+    )
+    DeadlineScale.MEDIUM -> ScaleColors(
+        accent = Color(0xFF00E5FF),
+        bg = Color(0xFF0E1F26),
+        border = Color(0xFF00515C),
+        tag = "MONTHLY"
+    )
+    DeadlineScale.LONG -> ScaleColors(
+        accent = Color(0xFFFF2A6D),
+        bg = Color(0xFF2A0F1A),
+        border = Color(0xFF5C1A33),
+        tag = "YEARLY"
+    )
+}
+
+// ---- Main composable ----
 
 @Composable
 fun DeadlineTaskCard(
@@ -40,26 +117,21 @@ fun DeadlineTaskCard(
     val sorted = remember(occurrences) { occurrences.sortedBy { it.scheduledAt } }
     var expanded by remember { mutableStateOf(false) }
 
-    val completedCount = sorted.count {
-        it.status == OccurrenceStatus.COMPLETED ||
-        it.status == OccurrenceStatus.LATE ||
-        it.status == OccurrenceStatus.RECOVERED
-    }
-    val total = sorted.size
-    val allDone = completedCount == total && total > 0
-    val progress = if (total == 0) 0f else completedCount.toFloat() / total
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress, animationSpec = tween(500), label = "p"
-    )
+    val scale = remember(sorted) { computeScale(sorted.size) }
+    val colors = colorsFor(scale)
 
-    // Find first PENDING or LATE day = "current unlockable"
-    val currentUnlockIdx = sorted.indexOfFirst {
-        it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE
-    }
+    val doneCount = sorted.count { it.occ().status.isDone() }
+    val total = sorted.size
+    val allDone = doneCount == total && total > 0
+    val progress = if (total == 0) 0f else doneCount.toFloat() / total
+    val animProgress by animateFloatAsState(progress, tween(500), label = "p")
+
+    // Build tree based on scale
+    val root = remember(sorted, scale) { buildTree(sorted, scale) }
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (allDone) Color(0xFF0F1F14) else Color(0xFF17171E)
+            containerColor = if (allDone) Color(0xFF0F1F14) else colors.bg
         ),
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier
@@ -67,12 +139,12 @@ fun DeadlineTaskCard(
             .padding(vertical = 5.dp)
             .border(
                 1.dp,
-                if (allDone) Color(0xFF1E4A25) else Color(0xFF2A2A32),
+                if (allDone) Color(0xFF1E4A25) else colors.border,
                 RoundedCornerShape(16.dp)
             )
     ) {
         Column {
-            // Header row
+            // Header
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -80,75 +152,122 @@ fun DeadlineTaskCard(
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            title,
-                            color = if (allDone) Color(0xFF9E9E9E) else Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFFFFB300).copy(alpha = 0.15f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                "$completedCount / $total days",
-                                color = Color(0xFFFFB300),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
+                // Scale badge
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.accent.copy(alpha = 0.2f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
                     Text(
-                        "$category • ${formatDate(sorted.firstOrNull()?.scheduledAt)} → ${formatDate(sorted.lastOrNull()?.scheduledAt)}",
-                        color = Color(0xFF9E9E9E),
-                        fontSize = 11.sp
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth().height(4.dp),
-                        color = if (allDone) Color(0xFF66BB6A) else Color(0xFFFFB300),
-                        trackColor = Color(0xFF2A2A32)
+                        colors.tag,
+                        color = colors.accent,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
                     )
                 }
                 Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        color = if (allDone) Color(0xFF9E9E9E) else Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "$category • ${doneCount} / $total days",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 11.sp
+                    )
+                }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("+${epReward * total} EP", color = if (allDone) Color(0xFF66BB6A) else Color(0xFFFFB300), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "+${epReward}/day",
+                        color = if (allDone) Color(0xFF66BB6A) else colors.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(Modifier.height(2.dp))
                     Icon(
                         if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                        contentDescription = null,
-                        tint = Color(0xFF9E9E9E),
-                        modifier = Modifier.size(22.dp)
+                        null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // Sub-days list (only when expanded)
-            AnimatedVisibility(visible = expanded) {
-                Column(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 14.dp)) {
-                    sorted.forEachIndexed { idx, occ ->
-                        val isDone = occ.status == OccurrenceStatus.COMPLETED ||
-                            occ.status == OccurrenceStatus.LATE ||
-                            occ.status == OccurrenceStatus.RECOVERED
-                        val isCurrent = idx == currentUnlockIdx
-                        val locked = !isDone && !isCurrent
+            // Progress bar
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF23232B))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(animProgress)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(if (allDone) Color(0xFF66BB6A) else colors.accent)
+                )
+            }
+            Spacer(Modifier.height(4.dp))
 
-                        DayRow(
-                            dayNumber = idx + 1,
-                            date = formatDate(occ.scheduledAt),
-                            done = isDone,
-                            locked = locked,
-                            current = isCurrent,
-                            onComplete = { if (!locked && !isDone) onCompleteDay(occ.id) },
-                            onTap = { if (!locked) onDayTap(occ.id) }
-                        )
+            // Expanded content
+            AnimatedVisibility(visible = expanded) {
+                Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp)) {
+                    when (root) {
+                        is RootTree.Yearly -> {
+                            root.years.forEach { year ->
+                                GroupBlock(
+                                    label = year.label,
+                                    done = year.doneCount,
+                                    total = year.total,
+                                    complete = year.complete,
+                                    accent = colors.accent,
+                                    level = 0
+                                ) {
+                                    year.months.forEach { month ->
+                                        GroupBlock(
+                                            label = month.label,
+                                            done = month.doneCount,
+                                            total = month.total,
+                                            complete = month.complete,
+                                            accent = colors.accent,
+                                            level = 1
+                                        ) {
+                                            month.weeks.forEach { week ->
+                                                WeekBlock(week, colors, onCompleteDay, onDayTap)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        is RootTree.Monthly -> {
+                            root.months.forEach { month ->
+                                GroupBlock(
+                                    label = month.label,
+                                    done = month.doneCount,
+                                    total = month.total,
+                                    complete = month.complete,
+                                    accent = colors.accent,
+                                    level = 0
+                                ) {
+                                    month.weeks.forEach { week ->
+                                        WeekBlock(week, colors, onCompleteDay, onDayTap)
+                                    }
+                                }
+                            }
+                        }
+                        is RootTree.Weekly -> {
+                            root.weeks.forEach { week ->
+                                WeekBlock(week, colors, onCompleteDay, onDayTap)
+                            }
+                        }
                     }
                 }
             }
@@ -157,93 +276,228 @@ fun DeadlineTaskCard(
 }
 
 @Composable
+private fun WeekBlock(
+    week: WeekNode,
+    colors: ScaleColors,
+    onCompleteDay: (Long) -> Unit,
+    onDayTap: (Long) -> Unit
+) {
+    Column(Modifier.padding(top = 4.dp)) {
+        Text(
+            "${week.label}  •  ${week.doneCount}/${week.total}",
+            color = Color(0xFF79829C),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
+        )
+        week.days.forEach { day ->
+            DayRow(
+                index = day.index,
+                dateLabel = day.dateLabel,
+                occ = day.occ,
+                accent = colors.accent,
+                onComplete = { onCompleteDay(day.occ.id) },
+                onTap = { onDayTap(day.occ.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupBlock(
+    label: String,
+    done: Int,
+    total: Int,
+    complete: Boolean,
+    accent: Color,
+    level: Int,
+    content: @Composable () -> Unit
+) {
+    var open by remember { mutableStateOf(!complete) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = if (level == 0) 8.dp else 4.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF14141A))
+                .clickable { open = !open }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                color = if (complete) Color(0xFF66BB6A) else Color.White,
+                fontSize = if (level == 0) 12.sp else 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "$done/$total",
+                color = accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(16.dp)
+            )
+        }
+        AnimatedVisibility(visible = open) {
+            Box(Modifier.padding(start = if (level == 0) 8.dp else 4.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
 private fun DayRow(
-    dayNumber: Int,
-    date: String,
-    done: Boolean,
-    locked: Boolean,
-    current: Boolean,
+    index: Int,
+    dateLabel: String,
+    occ: OccurrenceEntity,
+    accent: Color,
     onComplete: () -> Unit,
     onTap: () -> Unit
 ) {
+    val done = occ.status.isDone()
+    val locked = occ.status == OccurrenceStatus.SKIPPED
+
     val bg = when {
         done -> Color(0xFF132A18)
-        current -> Color(0xFF1E1A0F)
         locked -> Color(0xFF121216)
         else -> Color(0xFF14141A)
     }
-    val accent = when {
+    val rowAccent = when {
         done -> Color(0xFF66BB6A)
-        current -> Color(0xFFFFB300)
         locked -> Color(0xFF444444)
-        else -> Color(0xFF9E9E9E)
+        else -> accent
     }
 
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(start = 8.dp, end = 4.dp, top = 3.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(bg)
             .clickable(enabled = !locked) { onTap() }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // tiny checkbox / lock
         Box(
             Modifier
-                .size(28.dp)
+                .size(26.dp)
                 .clip(CircleShape)
                 .clickable(enabled = !locked && !done) { onComplete() },
             contentAlignment = Alignment.Center
         ) {
             when {
-                locked -> Icon(
-                    Icons.Filled.Lock, null,
-                    tint = Color(0xFF666666),
-                    modifier = Modifier.size(14.dp)
-                )
+                locked -> Icon(Icons.Filled.Lock, null, tint = Color(0xFF666666), modifier = Modifier.size(13.dp))
                 done -> Box(
-                    Modifier.size(20.dp).clip(CircleShape).background(accent),
+                    Modifier.size(20.dp).clip(CircleShape).background(rowAccent),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Check, null, tint = Color.Black, modifier = Modifier.size(13.dp))
+                    Icon(Icons.Filled.Check, null, tint = Color.Black, modifier = Modifier.size(12.dp))
                 }
                 else -> Box(
-                    Modifier.size(20.dp).clip(CircleShape).border(2.dp, accent, CircleShape)
+                    Modifier.size(20.dp).clip(CircleShape).border(2.dp, rowAccent, CircleShape)
                 )
             }
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                "Day $dayNumber",
+                "Day $index",
                 color = if (locked) Color(0xFF666666) else Color.White,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                date,
+                dateLabel,
                 color = if (locked) Color(0xFF444444) else Color(0xFF9E9E9E),
                 fontSize = 10.sp
             )
         }
-        Text(
-            when {
-                done -> "DONE"
-                locked -> "LOCKED"
-                current -> "START"
-                else -> ""
-            },
-            color = accent,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp
-        )
     }
 }
 
-private fun formatDate(millis: Long?): String {
-    if (millis == null) return "-"
-    return SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date(millis))
+// ---- Tree building ----
+
+private sealed class RootTree {
+    data class Weekly(val weeks: List<WeekNode>) : RootTree()
+    data class Monthly(val months: List<MonthNode>) : RootTree()
+    data class Yearly(val years: List<YearNode>) : RootTree()
 }
+
+private fun computeScale(days: Int): DeadlineScale = when {
+    days <= 31 -> DeadlineScale.SHORT
+    days <= 365 -> DeadlineScale.MEDIUM
+    else -> DeadlineScale.LONG
+}
+
+private fun buildTree(sorted: List<OccurrenceEntity>, scale: DeadlineScale): RootTree {
+    val zone = ZoneId.systemDefault()
+    // Build day nodes with stable index
+    val dayNodes = sorted.mapIndexed { i, occ ->
+        val date = Instant.ofEpochMilli(occ.scheduledAt).atZone(zone).toLocalDate()
+        val label = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)}"
+        DayNode(index = i + 1, occ = occ, dateLabel = label)
+    }
+
+    // Helper: group into weeks
+    fun groupWeeks(days: List<DayNode>): List<WeekNode> {
+        val grouped = linkedMapOf<String, MutableList<DayNode>>()
+        days.forEach { d ->
+            val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
+            // Use ISO week start (Monday) as key
+            val monday = date.minusDays((date.dayOfWeek.value - 1).toLong())
+            val key = "${monday.dayOfMonth} ${monday.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)}"
+            grouped.getOrPut(key) { mutableListOf() }.add(d)
+        }
+        return grouped.map { (k, v) -> WeekNode("Week of $k", v) }
+    }
+
+    return when (scale) {
+        DeadlineScale.SHORT -> RootTree.Weekly(groupWeeks(dayNodes))
+        DeadlineScale.MEDIUM -> {
+            val byMonth = linkedMapOf<String, MutableList<DayNode>>()
+            dayNodes.forEach { d ->
+                val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
+                val key = "${date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${date.year}"
+                byMonth.getOrPut(key) { mutableListOf() }.add(d)
+            }
+            RootTree.Monthly(
+                byMonth.map { (k, v) -> MonthNode(k, groupWeeks(v)) }
+            )
+        }
+        DeadlineScale.LONG -> {
+            val byYear = linkedMapOf<Int, MutableList<DayNode>>()
+            dayNodes.forEach { d ->
+                val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
+                byYear.getOrPut(date.year) { mutableListOf() }.add(d)
+            }
+            RootTree.Yearly(
+                byYear.map { (year, days) ->
+                    val byMonth = linkedMapOf<String, MutableList<DayNode>>()
+                    days.forEach { d ->
+                        val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
+                        val key = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                        byMonth.getOrPut(key) { mutableListOf() }.add(d)
+                    }
+                    YearNode(
+                        label = "Year $year",
+                        months = byMonth.map { (k, v) -> MonthNode(k, groupWeeks(v)) }
+                    )
+                }
+            )
+        }
+    }
+}
+
+// Convenience for occurrence to itself
+private fun OccurrenceEntity.occ(): OccurrenceEntity = this

@@ -4,11 +4,13 @@ import android.content.Context
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.model.*
 import com.taskerflow.app.domain.GamificationEngine
+import com.taskerflow.app.domain.GameConstants
 import com.taskerflow.app.domain.PenaltyEngine
 import com.taskerflow.app.worker.NotificationHelper
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 class TaskRepository(
     private val db: AppDatabase,
@@ -33,7 +35,9 @@ class TaskRepository(
     fun observeOccurrencesForTask(taskId: Long) = occDao.observeForTask(taskId)
 
     suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, Long> {
-        val taskId = taskDao.insert(task)
+        // Day/scheduled task always uses fixed 5 EP reward
+        val fixedTask = task.copy(difficulty = Difficulty.EASY) // EASY == 5 EP
+        val taskId = taskDao.insert(fixedTask)
         val occId = occDao.insert(
             OccurrenceEntity(
                 taskId = taskId,
@@ -48,31 +52,42 @@ class TaskRepository(
     }
 
     /**
-     * Creates one occurrence per calendar day between start and end (inclusive).
-     * Uses LocalDate so no timezone/off-by-one weirdness.
+     * Deadline task with a date range.
+     * Difficulty (EP per day) scaled by range length:
+     *   SHORT (<=31 days): 10 EP/day
+     *   MEDIUM (<=365 days): 15 EP/day
+     *   LONG (>365 days): 20 EP/day
      */
     suspend fun createDeadlineTaskWithDays(
         task: TaskEntity,
         startMillis: Long,
         endMillis: Long
     ): Pair<Long, List<Long>> {
-        val taskId = taskDao.insert(task)
-        val occIds = mutableListOf<Long>()
-
         val zone = ZoneId.systemDefault()
         val startDate = Instant.ofEpochMilli(startMillis).atZone(zone).toLocalDate()
         val endDate = Instant.ofEpochMilli(endMillis).atZone(zone).toLocalDate()
-
-        // Guard: swap if user reversed dates
         val (from, to) = if (startDate.isAfter(endDate)) endDate to startDate else startDate to endDate
+        val totalDays = ChronoUnit.DAYS.between(from, to).toInt() + 1
+
+        val scale = when {
+            totalDays <= 31 -> DeadlineScale.SHORT
+            totalDays <= 365 -> DeadlineScale.MEDIUM
+            else -> DeadlineScale.LONG
+        }
+        val diff = when (scale) {
+            DeadlineScale.SHORT -> Difficulty.NORMAL       // 10 EP
+            DeadlineScale.MEDIUM -> Difficulty.HARD        // 15 EP
+            DeadlineScale.LONG -> Difficulty.EXTREME       // 20 EP
+        }
+
+        val taskId = taskDao.insert(task.copy(difficulty = diff))
+        val occIds = mutableListOf<Long>()
 
         var current = from
         var dayIndex = 1
-        // hard cap 3650 days (10 years) to prevent accidents
         while (!current.isAfter(to) && dayIndex <= 3650) {
             val dayStart = current.atStartOfDay(zone).toInstant().toEpochMilli()
             val dayEnd = current.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-
             val id = occDao.insert(
                 OccurrenceEntity(
                     taskId = taskId,
@@ -83,10 +98,7 @@ class TaskRepository(
                 )
             )
             eventDao.insert(
-                EventEntity(
-                    occurrenceId = id, taskId = taskId,
-                    type = EventType.CREATED, note = "day_$dayIndex"
-                )
+                EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED, note = "day_$dayIndex")
             )
             occIds.add(id)
             current = current.plusDays(1)
@@ -195,10 +207,7 @@ class TaskRepository(
 
     suspend fun getStatsNow(): PlayerStatsEntity = statsDao.get() ?: PlayerStatsEntity()
 
-    /** Force-run penalty tick now (used by pull-to-refresh). */
-    suspend fun forceRefresh() {
-        applyPenaltiesTick()
-    }
+    suspend fun forceRefresh() { applyPenaltiesTick() }
 
     suspend fun applyPenaltiesTick(now: Long = System.currentTimeMillis()): Int {
         val overdue = occDao.getOverdue(now)
@@ -226,6 +235,7 @@ class TaskRepository(
             statsDao.upsert(currentStats)
             notifyIfNeeded(statsBefore, currentStats)
         }
+        return chargedCount
     }
 
     private fun notifyIfNeeded(before: PlayerStatsEntity, after: PlayerStatsEntity) {
