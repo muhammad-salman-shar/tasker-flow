@@ -3,6 +3,7 @@ package com.taskerflow.app.data.repo
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.model.*
 import com.taskerflow.app.domain.GamificationEngine
+import com.taskerflow.app.domain.PenaltyEngine
 import kotlinx.coroutines.flow.Flow
 
 class TaskRepository(private val db: AppDatabase) {
@@ -36,16 +37,11 @@ class TaskRepository(private val db: AppDatabase) {
         return taskId to occId
     }
 
-    suspend fun updateTask(task: TaskEntity) {
-        taskDao.update(task)
-    }
+    suspend fun updateTask(task: TaskEntity) { taskDao.update(task) }
 
     suspend fun deleteTask(taskId: Long) {
-        // archive instead of hard-delete (anti-exploit)
         taskDao.archive(taskId)
-        eventDao.insert(
-            EventEntity(occurrenceId = 0L, taskId = taskId, type = EventType.DELETED)
-        )
+        eventDao.insert(EventEntity(occurrenceId = 0L, taskId = taskId, type = EventType.DELETED))
     }
 
     suspend fun getOccurrence(id: Long) = occDao.getById(id)
@@ -132,4 +128,41 @@ class TaskRepository(private val db: AppDatabase) {
     }
 
     suspend fun getStatsNow(): PlayerStatsEntity = statsDao.get() ?: PlayerStatsEntity()
+
+    /**
+     * Runs the per-minute penalty engine on all pending overdue occurrences.
+     * Returns number of occurrences charged this tick.
+     */
+    suspend fun applyPenaltiesTick(now: Long = System.currentTimeMillis()): Int {
+        val overdue = occDao.getOverdue(now)
+        if (overdue.isEmpty()) return 0
+        val stats = statsDao.get() ?: PlayerStatsEntity()
+        var currentStats = stats
+        var chargedCount = 0
+
+        for (occ in overdue) {
+            val delta = PenaltyEngine.computePenalty(currentStats, occ, now)
+            if (delta.minutesCharged > 0) {
+                currentStats = currentStats.copy(
+                    ep = delta.newEp,
+                    health = delta.newHp,
+                    focusLockActive = delta.focusLockActive
+                )
+                occDao.update(occ.copy(penaltyAppliedCount = occ.penaltyAppliedCount + delta.minutesCharged))
+                eventDao.insert(
+                    EventEntity(
+                        occurrenceId = occ.id,
+                        taskId = occ.taskId,
+                        type = EventType.MISSED,
+                        note = "penalty_tick",
+                        epDelta = -delta.epDrained,
+                        healthDelta = -delta.hpDrained
+                    )
+                )
+                chargedCount++
+            }
+        }
+        if (chargedCount > 0) statsDao.upsert(currentStats)
+        return chargedCount
+    }
 }

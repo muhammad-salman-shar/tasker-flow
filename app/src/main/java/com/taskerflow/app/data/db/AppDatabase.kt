@@ -15,7 +15,7 @@ import com.taskerflow.app.data.model.*
         RecoveryQuestEntity::class,
         PlayerStatsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -18,10 +18,12 @@ import androidx.room.PrimaryKey
 data class OccurrenceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val taskId: Long,
-    val scheduledAt: Long,       // when to start / be reminded
-    val deadlineAt: Long,        // when it becomes MISSED
+    val scheduledAt: Long,
+    val deadlineAt: Long,
     val durationMinutes: Int = 0,
     val status: OccurrenceStatus = OccurrenceStatus.PENDING,
     val completedAt: Long? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    // how many per-minute penalties already applied after deadline
+    val penaltyAppliedCount: Int = 0
 )
