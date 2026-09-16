@@ -1,7 +1,12 @@
 package com.taskerflow.app.ui.block
 
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -20,22 +25,27 @@ import androidx.compose.ui.unit.sp
 import com.taskerflow.app.MainActivity
 
 class BlockerActivity : ComponentActivity() {
+
+    private var vibrator: Vibrator? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startVibrationLoop()
         setContent {
             BlockerContent(
                 blockedAppName = intent.getStringExtra("blocked_app") ?: "this app",
                 onOpenTasker = {
+                    stopVibration()
                     val i = Intent(this, MainActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                             Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP
                     }
                     startActivity(i)
-                    // finish AFTER starting MainActivity so it receives focus cleanly
                     finish()
                 },
                 onGoHome = {
+                    stopVibration()
                     val i = Intent(Intent.ACTION_MAIN).apply {
                         addCategory(Intent.CATEGORY_HOME)
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -45,6 +55,43 @@ class BlockerActivity : ComponentActivity() {
                 }
             )
         }
+    }
+
+    private fun startVibrationLoop() {
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val mgr = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            mgr.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        val v = vibrator ?: return
+        if (!v.hasVibrator()) return
+
+        // Pattern: [delay, vibrate, sleep] with repeat from index 0
+        val pattern = longArrayOf(0L, 400L, 400L)
+        val effect = VibrationEffect.createWaveform(pattern, 0)
+        v.vibrate(effect)
+    }
+
+    private fun stopVibration() {
+        vibrator?.cancel()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        stopVibration()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        startVibrationLoop()
+    }
+
+    override fun onDestroy() {
+        stopVibration()
+        super.onDestroy()
     }
 }
 

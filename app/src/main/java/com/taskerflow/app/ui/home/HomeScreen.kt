@@ -53,8 +53,8 @@ fun HomeScreen(vm: MainViewModel) {
     // Active occurrences: not COMPLETED/RECOVERED and scheduled <= today end
     val activeOccs = state.allOccurrences.filter {
         it.status != OccurrenceStatus.COMPLETED &&
+        it.status != OccurrenceStatus.LATE &&
         it.status != OccurrenceStatus.RECOVERED &&
-        it.scheduledAt <= todayEnd
     }
 
     // Group by task

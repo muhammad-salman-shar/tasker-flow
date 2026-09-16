@@ -50,15 +50,15 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
     // Which task IDs are relevant to this filter?
     val taskIdsForFilter: Set<Long> = when (filter) {
         TaskFilter.TODAY -> {
-            // any occurrence in today's window AND still pending/late
+            // only PENDING (unfinished) — LATE counts as done
             val todayIds = all.filter {
-                (it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE) &&
+                it.status == OccurrenceStatus.PENDING &&
                     it.scheduledAt <= todayEnd
             }.map { it.taskId }.toSet()
 
-            // OR any DEADLINE task that still has pending work in the future
+            // Plus deadline tasks with remaining PENDING work
             val deadlineIds = all.filter {
-                it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE
+                it.status == OccurrenceStatus.PENDING
             }.groupBy { it.taskId }
                 .filter { (taskId, _) ->
                     state.tasksById[taskId]?.taskType == TaskType.DEADLINE
