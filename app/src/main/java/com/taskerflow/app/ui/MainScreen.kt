@@ -6,10 +6,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.taskerflow.app.ui.create.CreateTaskScreen
 import com.taskerflow.app.ui.home.HomeScreen
 import com.taskerflow.app.ui.me.MeScreen
 import com.taskerflow.app.ui.stats.StatsScreen
@@ -22,14 +24,29 @@ sealed class Tab(val route: String, val label: String, val icon: ImageVector) {
     data object Me : Tab("me", "Me", Icons.Filled.Person)
 }
 
+const val ROUTE_CREATE = "create"
+
 @Composable
 fun MainScreen(vm: MainViewModel) {
     val nav = rememberNavController()
     val tabs = listOf(Tab.Home, Tab.Tasks, Tab.Stats, Tab.Me)
     val backStack by nav.currentBackStackEntryAsState()
     val currentDest = backStack?.destination
+    val currentRoute = currentDest?.route
+    val showFab = currentRoute != ROUTE_CREATE
 
     Scaffold(
+        floatingActionButton = {
+            if (showFab) {
+                FloatingActionButton(
+                    onClick = { nav.navigate(ROUTE_CREATE) },
+                    containerColor = Color(0xFFFFC107),
+                    contentColor = Color.Black
+                ) {
+                    Icon(Icons.Filled.Add, "New Task")
+                }
+            }
+        },
         bottomBar = {
             NavigationBar {
                 tabs.forEach { tab ->
@@ -58,6 +75,7 @@ fun MainScreen(vm: MainViewModel) {
             composable(Tab.Tasks.route) { TasksScreen(vm) }
             composable(Tab.Stats.route) { StatsScreen(vm) }
             composable(Tab.Me.route) { MeScreen(vm) }
+            composable(ROUTE_CREATE) { CreateTaskScreen(vm) { nav.popBackStack() } }
         }
     }
 }
