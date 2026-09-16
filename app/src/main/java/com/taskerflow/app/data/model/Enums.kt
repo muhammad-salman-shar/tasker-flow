@@ -18,5 +18,10 @@ enum class RecoveryStatus { ACTIVE, COMPLETED, ABANDONED }
 
 enum class Category { STUDY, CODING, FITNESS, WORK, PERSONAL, CREATIVE, LEARNING, OTHER }
 
-/** How a deadline task should render (derived from date range). */
-enum class DeadlineScale { SHORT, MEDIUM, LONG }
+/**
+ * Deadline rendering scale. Derived from day count.
+ * - WEEKLY: <= 7 days (amber)
+ * - MONTHLY: <= 31 days (cyan)
+ * - CUSTOM:  > 31 days (violet, no yearly concept)
+ */
+enum class DeadlineScale { WEEKLY, MONTHLY, CUSTOM }

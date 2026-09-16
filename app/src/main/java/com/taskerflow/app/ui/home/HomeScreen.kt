@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,8 +24,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taskerflow.app.data.model.OccurrenceEntity
 import com.taskerflow.app.data.model.OccurrenceStatus
+import com.taskerflow.app.data.model.TaskEntity
+import com.taskerflow.app.data.model.TaskType
 import com.taskerflow.app.ui.MainViewModel
+import com.taskerflow.app.ui.components.DeadlineTaskCard
 import com.taskerflow.app.ui.components.LiveClock
 import com.taskerflow.app.ui.components.TaskCard
 import kotlinx.coroutines.delay
@@ -42,9 +45,34 @@ fun HomeScreen(vm: MainViewModel) {
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
 
-    val activeTasks = state.todayOccurrences.filter {
+    // All occurrences of every task that still has work left (today or later)
+    val now = System.currentTimeMillis()
+    val todayEnd = now + 24L * 3600 * 1000
+
+    // Active occurrences: not COMPLETED/RECOVERED and scheduled <= today end
+    val activeOccs = state.allOccurrences.filter {
         it.status != OccurrenceStatus.COMPLETED &&
-        it.status != OccurrenceStatus.RECOVERED
+        it.status != OccurrenceStatus.RECOVERED &&
+        it.scheduledAt <= todayEnd
+    }
+
+    // Group by task
+    val activeByTask: Map<Long, List<OccurrenceEntity>> = activeOccs.groupBy { it.taskId }
+
+    // Separate day vs deadline
+    val dayTasks = mutableListOf<Pair<TaskEntity, OccurrenceEntity>>()
+    val deadlineTasks = mutableListOf<Pair<TaskEntity, List<OccurrenceEntity>>>()
+
+    activeByTask.forEach { (taskId, occs) ->
+        val task = state.tasksById[taskId] ?: return@forEach
+        // Grab ALL occurrences for this task (needed for deadline card to be accurate)
+        val allForTask = state.allOccurrences.filter { it.taskId == taskId }
+        if (task.taskType == TaskType.DEADLINE && allForTask.size > 1) {
+            deadlineTasks.add(task to allForTask)
+        } else {
+            val occ = occs.minByOrNull { it.scheduledAt } ?: return@forEach
+            dayTasks.add(task to occ)
+        }
     }
 
     PullToRefreshBox(
@@ -127,25 +155,31 @@ fun HomeScreen(vm: MainViewModel) {
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("YOUR QUESTS", fontWeight = FontWeight.Black, color = Color.White, fontSize = 13.sp, letterSpacing = 1.2.sp)
                 Spacer(Modifier.weight(1f))
-                Text("${activeTasks.size} active", color = Color(0xFF79829C), fontSize = 11.sp)
+                Text("${dayTasks.size + deadlineTasks.size} active", color = Color(0xFF79829C), fontSize = 11.sp)
             }
             Spacer(Modifier.height(6.dp))
 
-            if (activeTasks.isEmpty()) {
+            if (dayTasks.isEmpty() && deadlineTasks.isEmpty()) {
                 EmptyTasks()
             } else {
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 90.dp)) {
-                    items(activeTasks, key = { it.id }) { occ ->
-                        val task = state.tasksById[occ.taskId]
-                        val timeText = formatTime(occ.scheduledAt)
-                        val ep = task?.difficulty?.epReward ?: 10
+                    items(dayTasks, key = { "day_${it.first.id}" }) { (task, occ) ->
                         TaskCard(
-                            title = task?.title ?: "(deleted)",
-                            category = task?.category?.name ?: "OTHER",
-                            timeText = timeText,
-                            epText = "+$ep EP",
+                            title = task.title,
+                            category = task.category.name,
+                            timeText = formatTime(occ.scheduledAt),
+                            epText = "+${task.difficulty.epReward} EP",
                             status = occ.status,
                             onComplete = { vm.completeOccurrence(occ.id) }
+                        )
+                    }
+                    items(deadlineTasks, key = { "dl_${it.first.id}" }) { (task, occs) ->
+                        DeadlineTaskCard(
+                            title = task.title,
+                            category = task.category.name,
+                            occurrences = occs,
+                            epReward = task.difficulty.epReward,
+                            onCompleteDay = { occId -> vm.completeOccurrence(occId) }
                         )
                     }
                 }

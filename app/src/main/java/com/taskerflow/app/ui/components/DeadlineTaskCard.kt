@@ -26,14 +26,12 @@ import androidx.compose.ui.unit.sp
 import com.taskerflow.app.data.model.DeadlineScale
 import com.taskerflow.app.data.model.OccurrenceEntity
 import com.taskerflow.app.data.model.OccurrenceStatus
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.TextStyle
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-// ---- Data tree ----
+// ---------- Tree nodes (derived, not persisted) ----------
 
 private data class DayNode(
     val index: Int,
@@ -59,21 +57,12 @@ private data class MonthNode(
     val complete get() = doneCount == total && total > 0
 }
 
-private data class YearNode(
-    val label: String,
-    val months: List<MonthNode>
-) {
-    val doneCount get() = months.sumOf { it.doneCount }
-    val total get() = months.sumOf { it.total }
-    val complete get() = doneCount == total && total > 0
-}
-
 private fun OccurrenceStatus.isDone(): Boolean =
     this == OccurrenceStatus.COMPLETED ||
     this == OccurrenceStatus.LATE ||
     this == OccurrenceStatus.RECOVERED
 
-// ---- Colors per scale ----
+// ---------- Colors per scale ----------
 
 private data class ScaleColors(
     val accent: Color,
@@ -83,27 +72,33 @@ private data class ScaleColors(
 )
 
 private fun colorsFor(scale: DeadlineScale): ScaleColors = when (scale) {
-    DeadlineScale.SHORT -> ScaleColors(
+    DeadlineScale.WEEKLY -> ScaleColors(
         accent = Color(0xFFFFB300),
         bg = Color(0xFF1E1A0F),
         border = Color(0xFF5C4600),
         tag = "WEEKLY"
     )
-    DeadlineScale.MEDIUM -> ScaleColors(
+    DeadlineScale.MONTHLY -> ScaleColors(
         accent = Color(0xFF00E5FF),
         bg = Color(0xFF0E1F26),
         border = Color(0xFF00515C),
         tag = "MONTHLY"
     )
-    DeadlineScale.LONG -> ScaleColors(
-        accent = Color(0xFFFF2A6D),
-        bg = Color(0xFF2A0F1A),
-        border = Color(0xFF5C1A33),
-        tag = "YEARLY"
+    DeadlineScale.CUSTOM -> ScaleColors(
+        accent = Color(0xFFB388FF),
+        bg = Color(0xFF19122A),
+        border = Color(0xFF3D2A66),
+        tag = "CUSTOM"
     )
 }
 
-// ---- Main composable ----
+private fun computeScale(days: Int): DeadlineScale = when {
+    days <= 7 -> DeadlineScale.WEEKLY
+    days <= 31 -> DeadlineScale.MONTHLY
+    else -> DeadlineScale.CUSTOM
+}
+
+// ---------- Main composable ----------
 
 @Composable
 fun DeadlineTaskCard(
@@ -120,14 +115,13 @@ fun DeadlineTaskCard(
     val scale = remember(sorted) { computeScale(sorted.size) }
     val colors = colorsFor(scale)
 
-    val doneCount = sorted.count { it.occ().status.isDone() }
+    val doneCount = sorted.count { it.status.isDone() }
     val total = sorted.size
     val allDone = doneCount == total && total > 0
     val progress = if (total == 0) 0f else doneCount.toFloat() / total
     val animProgress by animateFloatAsState(progress, tween(500), label = "p")
 
-    // Build tree based on scale
-    val root = remember(sorted, scale) { buildTree(sorted, scale) }
+    val tree = remember(sorted, scale) { buildTree(sorted, scale) }
 
     Card(
         colors = CardDefaults.cardColors(
@@ -144,7 +138,7 @@ fun DeadlineTaskCard(
             )
     ) {
         Column {
-            // Header
+            // Header (clickable to expand; NO checkbox — parent is not directly completable)
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -152,7 +146,6 @@ fun DeadlineTaskCard(
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Scale badge
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(6.dp))
@@ -216,59 +209,67 @@ fun DeadlineTaskCard(
             }
             Spacer(Modifier.height(4.dp))
 
-            // Expanded content
             AnimatedVisibility(visible = expanded) {
                 Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 12.dp)) {
-                    when (root) {
-                        is RootTree.Yearly -> {
-                            root.years.forEach { year ->
-                                GroupBlock(
-                                    label = year.label,
-                                    done = year.doneCount,
-                                    total = year.total,
-                                    complete = year.complete,
-                                    accent = colors.accent,
-                                    level = 0
-                                ) {
-                                    year.months.forEach { month ->
-                                        GroupBlock(
-                                            label = month.label,
-                                            done = month.doneCount,
-                                            total = month.total,
-                                            complete = month.complete,
-                                            accent = colors.accent,
-                                            level = 1
-                                        ) {
-                                            month.weeks.forEach { week ->
-                                                WeekBlock(week, colors, onCompleteDay, onDayTap)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        is RootTree.Monthly -> {
-                            root.months.forEach { month ->
-                                GroupBlock(
-                                    label = month.label,
-                                    done = month.doneCount,
-                                    total = month.total,
-                                    complete = month.complete,
-                                    accent = colors.accent,
-                                    level = 0
-                                ) {
-                                    month.weeks.forEach { week ->
-                                        WeekBlock(week, colors, onCompleteDay, onDayTap)
-                                    }
-                                }
-                            }
-                        }
+                    when (val t = tree) {
                         is RootTree.Weekly -> {
-                            root.weeks.forEach { week ->
+                            t.weeks.forEach { week ->
                                 WeekBlock(week, colors, onCompleteDay, onDayTap)
                             }
                         }
+                        is RootTree.Monthly -> {
+                            t.months.forEach { month ->
+                                MonthBlock(month, colors, onCompleteDay, onDayTap)
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthBlock(
+    month: MonthNode,
+    colors: ScaleColors,
+    onCompleteDay: (Long) -> Unit,
+    onDayTap: (Long) -> Unit
+) {
+    var open by remember(month.complete) { mutableStateOf(!month.complete) }
+    Column(Modifier.padding(top = 6.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF14141A))
+                .clickable { open = !open }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (month.complete) "✓ ${month.label}" else month.label,
+                color = if (month.complete) Color(0xFF66BB6A) else Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                if (month.complete) "COMPLETE" else "${month.doneCount}/${month.total}",
+                color = colors.accent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(16.dp)
+            )
+        }
+        AnimatedVisibility(visible = open) {
+            Column(Modifier.padding(start = 6.dp)) {
+                month.weeks.forEach { week ->
+                    WeekBlock(week, colors, onCompleteDay, onDayTap)
                 }
             }
         }
@@ -282,6 +283,34 @@ private fun WeekBlock(
     onCompleteDay: (Long) -> Unit,
     onDayTap: (Long) -> Unit
 ) {
+    // Collapse completed week into single summary row
+    if (week.complete) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp, start = 8.dp, end = 4.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF132A18))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(20.dp).clip(CircleShape).background(Color(0xFF66BB6A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Check, null, tint = Color.Black, modifier = Modifier.size(13.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "${week.label} Complete",
+                color = Color(0xFF66BB6A),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        return
+    }
+
     Column(Modifier.padding(top = 4.dp)) {
         Text(
             "${week.label}  •  ${week.doneCount}/${week.total}",
@@ -300,58 +329,6 @@ private fun WeekBlock(
                 onComplete = { onCompleteDay(day.occ.id) },
                 onTap = { onDayTap(day.occ.id) }
             )
-        }
-    }
-}
-
-@Composable
-private fun GroupBlock(
-    label: String,
-    done: Int,
-    total: Int,
-    complete: Boolean,
-    accent: Color,
-    level: Int,
-    content: @Composable () -> Unit
-) {
-    var open by remember { mutableStateOf(!complete) }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = if (level == 0) 8.dp else 4.dp)
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF14141A))
-                .clickable { open = !open }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                label,
-                color = if (complete) Color(0xFF66BB6A) else Color.White,
-                fontSize = if (level == 0) 12.sp else 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                "$done/$total",
-                color = accent,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(6.dp))
-            Icon(
-                if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(16.dp)
-            )
-        }
-        AnimatedVisibility(visible = open) {
-            Box(Modifier.padding(start = if (level == 0) 8.dp else 4.dp)) {
-                content()
-            }
         }
     }
 }
@@ -426,45 +403,55 @@ private fun DayRow(
     }
 }
 
-// ---- Tree building ----
+// ---------- Tree ----------
 
 private sealed class RootTree {
     data class Weekly(val weeks: List<WeekNode>) : RootTree()
     data class Monthly(val months: List<MonthNode>) : RootTree()
-    data class Yearly(val years: List<YearNode>) : RootTree()
-}
-
-private fun computeScale(days: Int): DeadlineScale = when {
-    days <= 31 -> DeadlineScale.SHORT
-    days <= 365 -> DeadlineScale.MEDIUM
-    else -> DeadlineScale.LONG
 }
 
 private fun buildTree(sorted: List<OccurrenceEntity>, scale: DeadlineScale): RootTree {
     val zone = ZoneId.systemDefault()
-    // Build day nodes with stable index
+
     val dayNodes = sorted.mapIndexed { i, occ ->
         val date = Instant.ofEpochMilli(occ.scheduledAt).atZone(zone).toLocalDate()
         val label = "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)}"
         DayNode(index = i + 1, occ = occ, dateLabel = label)
     }
 
-    // Helper: group into weeks
+    // Group by ISO-week (Monday start), sequential (no dedup across boundary)
     fun groupWeeks(days: List<DayNode>): List<WeekNode> {
-        val grouped = linkedMapOf<String, MutableList<DayNode>>()
+        if (days.isEmpty()) return emptyList()
+        val weeks = mutableListOf<WeekNode>()
+        var currentKey: String? = null
+        var bucket = mutableListOf<DayNode>()
+
+        fun flush(key: String) {
+            if (bucket.isNotEmpty()) {
+                weeks.add(WeekNode("Week of $key", bucket.toList()))
+                bucket = mutableListOf()
+            }
+        }
+
         days.forEach { d ->
             val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
-            // Use ISO week start (Monday) as key
             val monday = date.minusDays((date.dayOfWeek.value - 1).toLong())
             val key = "${monday.dayOfMonth} ${monday.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)}"
-            grouped.getOrPut(key) { mutableListOf() }.add(d)
+            if (currentKey == null) {
+                currentKey = key
+            } else if (key != currentKey) {
+                flush(currentKey!!)
+                currentKey = key
+            }
+            bucket.add(d)
         }
-        return grouped.map { (k, v) -> WeekNode("Week of $k", v) }
+        flush(currentKey!!)
+        return weeks
     }
 
     return when (scale) {
-        DeadlineScale.SHORT -> RootTree.Weekly(groupWeeks(dayNodes))
-        DeadlineScale.MEDIUM -> {
+        DeadlineScale.WEEKLY -> RootTree.Weekly(groupWeeks(dayNodes))
+        else -> {
             val byMonth = linkedMapOf<String, MutableList<DayNode>>()
             dayNodes.forEach { d ->
                 val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
@@ -475,29 +462,5 @@ private fun buildTree(sorted: List<OccurrenceEntity>, scale: DeadlineScale): Roo
                 byMonth.map { (k, v) -> MonthNode(k, groupWeeks(v)) }
             )
         }
-        DeadlineScale.LONG -> {
-            val byYear = linkedMapOf<Int, MutableList<DayNode>>()
-            dayNodes.forEach { d ->
-                val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
-                byYear.getOrPut(date.year) { mutableListOf() }.add(d)
-            }
-            RootTree.Yearly(
-                byYear.map { (year, days) ->
-                    val byMonth = linkedMapOf<String, MutableList<DayNode>>()
-                    days.forEach { d ->
-                        val date = Instant.ofEpochMilli(d.occ.scheduledAt).atZone(zone).toLocalDate()
-                        val key = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-                        byMonth.getOrPut(key) { mutableListOf() }.add(d)
-                    }
-                    YearNode(
-                        label = "Year $year",
-                        months = byMonth.map { (k, v) -> MonthNode(k, groupWeeks(v)) }
-                    )
-                }
-            )
-        }
     }
 }
-
-// Convenience for occurrence to itself
-private fun OccurrenceEntity.occ(): OccurrenceEntity = this
