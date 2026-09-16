@@ -9,9 +9,9 @@ data class EpResult(val epGained: Int, val healthGained: Int, val reason: String
 object GamificationEngine {
 
     /**
-     * minutesLate > 0  → task completed after deadline (penalty)
+     * minutesLate > 0  → after deadline (penalty)
      * minutesLate == 0 → on time (full EP)
-     * minutesLate < 0  → completed early (bonus if 30+ min early)
+     * minutesLate <= -EARLY_THRESHOLD_MIN → early bonus
      */
     fun computeCompletionEp(baseEp: Int, minutesLate: Int): Int {
         return when {
@@ -36,12 +36,14 @@ object GamificationEngine {
         val gained = computeCompletionEp(baseEp, minutesLate)
         val newEp = stats.ep + gained
 
-        val oldTicks = stats.ep / GameConstants.EP_PER_HEALTH_TICK
-        val newTicks = newEp / GameConstants.EP_PER_HEALTH_TICK
-        val tickDelta = newTicks - oldTicks
-        val healthGain = tickDelta * GameConstants.HEALTH_GAIN_PER_TICK
-        val newHealth = min(GameConstants.HEALTH_MAX, stats.health + healthGain)
+        // ---- HP milestone: only award HP for NEW milestones, never re-award ----
+        val currentMilestone = newEp / GameConstants.EP_PER_HEALTH_TICK
+        val highest = stats.highestEpMilestone
+        val newMilestones = (currentMilestone - highest).coerceAtLeast(0)
+        val healthGain = newMilestones * GameConstants.HEALTH_GAIN_PER_TICK
+        val newHighest = max(highest, currentMilestone)
 
+        val newHealth = min(GameConstants.HEALTH_MAX, stats.health + healthGain)
         val newLevel = computeLevel(newEp)
 
         val reason = when {
@@ -56,7 +58,8 @@ object GamificationEngine {
             level = newLevel,
             totalCompleted = stats.totalCompleted + 1,
             recoveryModeActive = newEp < GameConstants.RECOVERY_MODE_CLEAR_EP && stats.recoveryModeActive,
-            focusLockActive = newHealth < GameConstants.FOCUS_RELEASE_HEALTH_THRESHOLD && stats.focusLockActive
+            focusLockActive = newHealth < GameConstants.FOCUS_RELEASE_HEALTH_THRESHOLD && stats.focusLockActive,
+            highestEpMilestone = newHighest
         )
         return updated to EpResult(gained, healthGain, reason)
     }

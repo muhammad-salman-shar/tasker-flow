@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,6 +84,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
 
     val dateFmt = remember { SimpleDateFormat("dd MMM yy", Locale.getDefault()) }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -285,19 +287,26 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                             repeatRule = RepeatRule.NEVER,
                             durationMinutes = dur
                         )
-                        if (isEdit) {
-                            vm.updateTaskWithOccurrence(task, scheduledAt, finalDeadline)
-                        } else if (isDeadline) {
-                            vm.createDeadlineTask(task, scheduledAt, deadlineAt)
-                        } else {
-                            vm.createTask(task, scheduledAt, finalDeadline)
+                        scope.launch {
+                            if (isEdit) {
+                                vm.updateTaskAndWait(task, scheduledAt, finalDeadline)
+                            } else {
+                                vm.saveTaskAndWait(
+                                    task = task,
+                                    scheduledAt = scheduledAt,
+                                    deadlineAt = finalDeadline,
+                                    isDeadline = isDeadline,
+                                    deadlineEndMillis = deadlineAt
+                                )
+                            }
+                            onBack()
                         }
                     },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    if (isEdit) "UPDATE TASK  •  +${difficulty.epReward} EP"
-                    else "CREATE TASK  •  +${difficulty.epReward} EP",
+                    if (isEdit) "SAVE CHANGES  •  +${difficulty.epReward} EP"
+                    else "SAVE TASK  •  +${difficulty.epReward} EP",
                     color = Color.Black,
                     fontWeight = FontWeight.Black,
                     fontSize = 14.sp,

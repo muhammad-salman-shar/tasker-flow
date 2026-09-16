@@ -52,7 +52,7 @@ class TaskerApp : Application() {
         appScope.launch {
             while (true) {
                 try { repository.applyPenaltiesTick() } catch (_: Exception) {}
-                delay(30_000L)
+                delay(10_000L)
             }
         }
     }

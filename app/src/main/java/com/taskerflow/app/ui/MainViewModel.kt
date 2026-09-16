@@ -41,8 +41,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val wideRange: Pair<Long, Long> = run {
         val c = Calendar.getInstance()
-        val end = c.timeInMillis + 30L * 24 * 3600 * 1000
-        val start = c.timeInMillis - 30L * 24 * 3600 * 1000
+        val end = c.timeInMillis + 500L * 24 * 3600 * 1000
+        val start = c.timeInMillis - 500L * 24 * 3600 * 1000
         start to end
     }
 
@@ -72,26 +72,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun completeOccurrence(id: Long) = viewModelScope.launch { repo.completeOccurrence(id) }
 
-    fun createTask(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
-        val (_, occId) = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
-        AlarmScheduler.scheduleReminder(
-            ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
-            title = task.title, epReward = task.difficulty.epReward
-        )
-    }
-
-    fun createDeadlineTask(task: TaskEntity, startMillis: Long, endMillis: Long) = viewModelScope.launch {
-        val (_, occIds) = repo.createDeadlineTaskWithDays(task, startMillis, endMillis)
-        // schedule reminder for day 1 only
-        occIds.firstOrNull()?.let { firstOcc ->
+    // ---- SAVE-AND-NAVIGATE variants (suspend, return after DB commit) ----
+    suspend fun saveTaskAndWait(
+        task: TaskEntity,
+        scheduledAt: Long,
+        deadlineAt: Long,
+        isDeadline: Boolean,
+        deadlineEndMillis: Long
+    ) {
+        if (isDeadline) {
+            val (_, occIds) = repo.createDeadlineTaskWithDays(task, scheduledAt, deadlineEndMillis)
+            occIds.firstOrNull()?.let { firstOcc ->
+                AlarmScheduler.scheduleReminder(
+                    ctx = appCtx, occurrenceId = firstOcc, triggerAt = scheduledAt,
+                    title = task.title, epReward = task.difficulty.epReward
+                )
+            }
+        } else {
+            val (_, occId) = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
             AlarmScheduler.scheduleReminder(
-                ctx = appCtx, occurrenceId = firstOcc, triggerAt = startMillis,
+                ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
                 title = task.title, epReward = task.difficulty.epReward
             )
         }
     }
 
-    fun updateTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) = viewModelScope.launch {
+    suspend fun updateTaskAndWait(task: TaskEntity, scheduledAt: Long, deadlineAt: Long) {
         val occId = repo.updateTaskWithOccurrence(task, scheduledAt, deadlineAt)
         if (occId != null && scheduledAt > System.currentTimeMillis()) {
             AlarmScheduler.cancel(appCtx, occId)
