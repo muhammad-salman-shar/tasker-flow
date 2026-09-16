@@ -42,7 +42,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
     var isDeadline by remember {
         mutableStateOf(existing?.taskType == TaskType.DEADLINE)
     }
-    var durationMin by remember { mutableStateOf(existing?.durationMinutes ?: 30) }
+    var durationMinStr by remember { mutableStateOf((existing?.durationMinutes ?: 30).toString()) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val cal = remember {
@@ -199,8 +199,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                 Spacer(Modifier.height(10.dp))
                 Label("Duration (min)")
                 OutlinedTextField(
-                    value = durationMin.toString(),
-                    onValueChange = { durationMin = it.toIntOrNull() ?: 30 },
+                    value = durationMinStr,
+                    onValueChange = { s -> if (s.length <= 4 && s.all { it.isDigit() }) durationMinStr = s },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -274,7 +274,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                     .background(Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100))))
                     .clickable {
                         if (title.isBlank()) { error = "Title required"; return@clickable }
-                        val finalDeadline = if (isDeadline) deadlineAt else scheduledAt + durationMin * 60_000L
+                        val dur = durationMinStr.toIntOrNull() ?: 30
+                        val finalDeadline = if (isDeadline) deadlineAt else scheduledAt + dur * 60_000L
                         val task = TaskEntity(
                             id = existing?.id ?: 0L,
                             title = title.trim(),
@@ -284,7 +285,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                             taskType = if (isDeadline) TaskType.DEADLINE else TaskType.SCHEDULED,
                             difficulty = difficulty,
                             repeatRule = RepeatRule.NEVER,
-                            durationMinutes = durationMin
+                                durationMinutes = durationMinStr.toIntOrNull() ?: 30
                         )
                         if (existing != null) {
                             vm.updateTask(task)
