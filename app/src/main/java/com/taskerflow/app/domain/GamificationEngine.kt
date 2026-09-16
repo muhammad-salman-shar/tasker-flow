@@ -8,11 +8,6 @@ data class EpResult(val epGained: Int, val healthGained: Int, val reason: String
 
 object GamificationEngine {
 
-    /**
-     * minutesLate > 0  → after deadline (penalty)
-     * minutesLate == 0 → on time (full EP)
-     * minutesLate <= -EARLY_THRESHOLD_MIN → early bonus
-     */
     fun computeCompletionEp(baseEp: Int, minutesLate: Int): Int {
         return when {
             minutesLate <= -GameConstants.EARLY_THRESHOLD_MIN ->
@@ -36,7 +31,6 @@ object GamificationEngine {
         val gained = computeCompletionEp(baseEp, minutesLate)
         val newEp = stats.ep + gained
 
-        // ---- HP milestone: only award HP for NEW milestones, never re-award ----
         val currentMilestone = newEp / GameConstants.EP_PER_HEALTH_TICK
         val highest = stats.highestEpMilestone
         val newMilestones = (currentMilestone - highest).coerceAtLeast(0)
@@ -74,13 +68,30 @@ object GamificationEngine {
         )
     }
 
-    fun computeLevel(totalEp: Int): Int =
-        max(1, totalEp / GameConstants.EP_PER_LEVEL + 1)
+    /** Cumulative EP required to *enter* level N (Level 1 starts at 0). */
+    fun thresholdForLevel(level: Int): Int {
+        if (level <= 1) return 0
+        // Level N starts at: 90 * (N-1) * N / 2
+        val n = level
+        return GameConstants.EP_PER_CYCLE * (n - 1) * n / 2
+    }
 
+    /** How many cycles are needed to complete current level. */
+    fun cyclesForLevel(level: Int): Int = level
+
+    fun computeLevel(totalEp: Int): Int {
+        var level = 1
+        while (totalEp >= thresholdForLevel(level + 1)) level++
+        return level
+    }
+
+    /**
+     * Returns (currentCycleEp, EP_PER_CYCLE) — the circle displays 0..90.
+     */
     fun levelProgress(totalEp: Int): Pair<Int, Int> {
         val level = computeLevel(totalEp)
-        val floor = (level - 1) * GameConstants.EP_PER_LEVEL
-        val next = level * GameConstants.EP_PER_LEVEL
-        return (totalEp - floor) to (next - floor)
+        val levelStart = thresholdForLevel(level)
+        val epInLevel = (totalEp - levelStart).coerceAtLeast(0)
+        return (epInLevel % GameConstants.EP_PER_CYCLE) to GameConstants.EP_PER_CYCLE
     }
 }

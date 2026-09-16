@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.taskerflow.app.domain.GamificationEngine
 import com.taskerflow.app.ui.MainViewModel
 
 @Composable
@@ -58,8 +59,8 @@ fun StatsScreen(vm: MainViewModel) {
                     color = Color(0xFFEF5350)
                 )
                 RingStat(
-                    value = (s.ep % 80).toFloat(),
-                    max = 80f,
+                    value = GamificationEngine.levelProgress(s.ep).first.toFloat(),
+                    max = 90f,
                     center = "${s.ep}",
                     label = "EP",
                     color = Color(0xFFFFC107)

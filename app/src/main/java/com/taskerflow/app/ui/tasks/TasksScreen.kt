@@ -45,13 +45,28 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
 
     val all = state.allOccurrences
     val now = System.currentTimeMillis()
+    val todayEnd = now + 24 * 3600 * 1000
 
-    // Which taskIds are relevant to this filter?
+    // Which task IDs are relevant to this filter?
     val taskIdsForFilter: Set<Long> = when (filter) {
-        TaskFilter.TODAY -> all.filter {
-            (it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE) &&
-            it.scheduledAt <= now + 24 * 3600 * 1000
-        }.map { it.taskId }.toSet()
+        TaskFilter.TODAY -> {
+            // any occurrence in today's window AND still pending/late
+            val todayIds = all.filter {
+                (it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE) &&
+                    it.scheduledAt <= todayEnd
+            }.map { it.taskId }.toSet()
+
+            // OR any DEADLINE task that still has pending work in the future
+            val deadlineIds = all.filter {
+                it.status == OccurrenceStatus.PENDING || it.status == OccurrenceStatus.LATE
+            }.groupBy { it.taskId }
+                .filter { (taskId, _) ->
+                    state.tasksById[taskId]?.taskType == TaskType.DEADLINE
+                }
+                .keys
+
+            todayIds + deadlineIds
+        }
         TaskFilter.UPCOMING -> all.filter {
             it.status == OccurrenceStatus.PENDING && it.scheduledAt > now
         }.map { it.taskId }.toSet()
@@ -63,7 +78,6 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
         TaskFilter.RECOVERY -> emptySet()
     }
 
-    // All occurrences of every relevant task (so deadline children show fully)
     val allByTask: Map<Long, List<OccurrenceEntity>> = remember(all, taskIdsForFilter) {
         all.filter { it.taskId in taskIdsForFilter }.groupBy { it.taskId }
     }
@@ -136,7 +150,8 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                                 occurrences = occs,
                                 epReward = task.difficulty.epReward,
                                 onCompleteDay = { occId -> vm.completeOccurrence(occId) },
-                                onDayTap = { _ -> actionTask = task }
+                                onDayTap = { _ -> actionTask = task },
+                                onMenuClick = { actionTask = task }
                             )
                         } else {
                             val occ = occs.sortedBy { it.scheduledAt }.first()

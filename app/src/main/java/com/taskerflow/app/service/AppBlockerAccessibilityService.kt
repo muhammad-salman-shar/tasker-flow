@@ -10,20 +10,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class AppBlockerAccessibilityService : AccessibilityService() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var lastForegroundPkg: String? = null
-    private var healthBelow50 = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // In-memory cache — updated by flows, read instantly on every event
+    @Volatile private var blockedSet: Set<String> = emptySet()
+    @Volatile private var strictMode: Boolean = false
+    @Volatile private var healthBelow50: Boolean = false
+
+    private var lastBlockedPkg: String? = null
+    private var lastBlockedAt: Long = 0L
 
     companion object {
-        // Exposed so UI can show "enabled / disabled"
         val running = MutableStateFlow(false)
 
-        // Apps always allowed (essential)
         val ESSENTIALS = setOf(
             "com.android.dialer",
             "com.android.phone",
@@ -42,9 +45,16 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         running.value = true
 
-        // Observe health in background to know when to start blocking
+        val app = application as TaskerApp
+
+        // Prime cache + observe in background
         scope.launch {
-            val app = application as TaskerApp
+            app.blockedAppsRepository.blockedPackages.collect { blockedSet = it }
+        }
+        scope.launch {
+            app.blockedAppsRepository.strictMode.collect { strictMode = it }
+        }
+        scope.launch {
             app.repository.observeStats().collect { stats ->
                 healthBelow50 = stats != null && stats.health < 50
             }
@@ -56,31 +66,24 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return
 
-        val pkg = event.packageName?.toString() ?: return
-        if (pkg == lastForegroundPkg) return
-        lastForegroundPkg = pkg
-
+        // Fast path: don't do anything if not in blocking state
         if (!healthBelow50) return
+
+        val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
         if (pkg in ESSENTIALS) return
         if (pkg.startsWith("com.android.")) return
 
-        scope.launch {
-            val app = application as TaskerApp
-            val strict = app.blockedAppsRepository.strictMode.first()
-            val blockedSet = app.blockedAppsRepository.blockedPackages.first()
+        val shouldBlock = if (strictMode) true else pkg in blockedSet
+        if (!shouldBlock) return
 
-            val shouldBlock = if (strict) {
-                // Strict: everything not essential is blocked
-                true
-            } else {
-                pkg in blockedSet
-            }
+        // Debounce: same pkg within 1s → ignore (prevents triple-launch)
+        val now = System.currentTimeMillis()
+        if (pkg == lastBlockedPkg && (now - lastBlockedAt) < 1500L) return
+        lastBlockedPkg = pkg
+        lastBlockedAt = now
 
-            if (shouldBlock) {
-                launchBlockerScreen(pkg)
-            }
-        }
+        launchBlockerScreen(pkg)
     }
 
     private fun launchBlockerScreen(pkg: String) {
@@ -90,7 +93,12 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         } catch (_: PackageManager.NameNotFoundException) { pkg }
 
         val intent = Intent(this, BlockerActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            )
             putExtra("blocked_app", label)
         }
         startActivity(intent)

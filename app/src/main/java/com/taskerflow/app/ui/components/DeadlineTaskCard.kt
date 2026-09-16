@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -107,7 +108,8 @@ fun DeadlineTaskCard(
     occurrences: List<OccurrenceEntity>,
     epReward: Int,
     onCompleteDay: (Long) -> Unit,
-    onDayTap: (Long) -> Unit = {}
+    onDayTap: (Long) -> Unit = {},
+    onMenuClick: () -> Unit = {}
 ) {
     val sorted = remember(occurrences) { occurrences.sortedBy { it.scheduledAt } }
     var expanded by remember { mutableStateOf(false) }
@@ -183,6 +185,9 @@ fun DeadlineTaskCard(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(2.dp))
+                    IconButton(onClick = onMenuClick, modifier = Modifier.size(22.dp)) {
+                        Icon(Icons.Filled.MoreVert, null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(20.dp))
+                    }
                     Icon(
                         if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                         null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(20.dp)

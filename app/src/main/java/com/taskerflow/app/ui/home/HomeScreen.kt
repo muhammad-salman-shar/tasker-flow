@@ -28,6 +28,7 @@ import com.taskerflow.app.data.model.OccurrenceEntity
 import com.taskerflow.app.data.model.OccurrenceStatus
 import com.taskerflow.app.data.model.TaskEntity
 import com.taskerflow.app.data.model.TaskType
+import com.taskerflow.app.domain.GamificationEngine
 import com.taskerflow.app.ui.MainViewModel
 import com.taskerflow.app.ui.components.DeadlineTaskCard
 import com.taskerflow.app.ui.components.LiveClock
@@ -118,8 +119,8 @@ fun HomeScreen(vm: MainViewModel) {
                 )
                 VitalCard(
                     modifier = Modifier.weight(1f),
-                    value = stats.ep % 80,
-                    maxValue = 80,
+                    value = GamificationEngine.levelProgress(stats.ep).first,
+                    maxValue = 90,
                     numberText = "${stats.ep}",
                     label = "ENERGY (EP)",
                     statusText = when {

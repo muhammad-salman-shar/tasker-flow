@@ -18,12 +18,14 @@ object GameConstants {
     const val FOCUS_LOCK_HEALTH_THRESHOLD = 50
     const val FOCUS_RELEASE_HEALTH_THRESHOLD = 55
 
-    const val EP_PER_LEVEL = 80
+    // Level system: each "cycle" = 90 EP.
+    // Level 1 → 2 needs 1 cycle (90 EP)
+    // Level 2 → 3 needs 2 cycles (180 EP)
+    // Level N → N+1 needs N cycles.
+    const val EP_PER_CYCLE = 90
+
     const val DAILY_HEALTH_DAMAGE_CAP = 25
 
-    // Reward tiers
+    // Task rewards
     const val EP_DAY_TASK = 5
-    const val EP_DEADLINE_SHORT = 10    // <= 31 days
-    const val EP_DEADLINE_MEDIUM = 15   // <= 365 days
-    const val EP_DEADLINE_LONG = 20     // > 365 days
 }
