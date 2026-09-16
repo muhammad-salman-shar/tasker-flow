@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tasker Flow</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_tasks">Tasks</string>
+    <string name="nav_stats">Stats</string>
+    <string name="nav_me">Me</string>
+    <string name="complete">Complete</string>
+    <string name="snooze">Snooze</string>
+</resources>

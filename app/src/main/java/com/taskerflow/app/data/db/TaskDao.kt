@@ -1,0 +1,18 @@
+package com.taskerflow.app.data.db
+
+import androidx.room.*
+import com.taskerflow.app.data.model.TaskEntity
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface TaskDao {
+    @Insert suspend fun insert(task: TaskEntity): Long
+    @Update suspend fun update(task: TaskEntity)
+    @Query("DELETE FROM tasks WHERE id = :id") suspend fun deleteById(id: Long)
+    @Query("SELECT * FROM tasks WHERE archived = 0 ORDER BY createdAt DESC")
+    fun observeActive(): Flow<List<TaskEntity>>
+    @Query("SELECT * FROM tasks WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): TaskEntity?
+    @Query("SELECT * FROM tasks")
+    suspend fun getAll(): List<TaskEntity>
+}
