@@ -41,6 +41,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
     var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
     var isDeadline by remember { mutableStateOf(false) }
     var durationMinStr by remember { mutableStateOf("30") }
+    var repeatRule by remember { mutableStateOf(RepeatRule.NEVER) }
+    var reminderOffset by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(!isEdit) }
@@ -73,6 +75,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                 difficulty = t.difficulty
                 isDeadline = t.taskType == TaskType.DEADLINE
                 durationMinStr = t.durationMinutes.toString()
+                repeatRule = t.repeatRule
+                reminderOffset = t.reminderOffsetMinutes
             }
             val occ = vm.fetchLatestOccurrence(editingTaskId!!)
             if (occ != null) {
@@ -260,6 +264,34 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                 }
             }
 
+            // ---- Repeat ----
+            Label("Repeat")
+            SimpleDropdown(
+                modifier = Modifier.fillMaxWidth(),
+                label = "Repeat",
+                selected = repeatRule,
+                options = RepeatRule.values().toList(),
+                labelFn = { it.name.replace("_", " ") }
+            ) { repeatRule = it }
+
+            Spacer(Modifier.height(14.dp))
+
+            // ---- Reminder ----
+            Label("Reminder")
+            SimpleDropdown(
+                modifier = Modifier.fillMaxWidth(),
+                label = "Reminder",
+                selected = reminderOffset,
+                options = listOf(0, 5, 15, 30, 60, 120),
+                labelFn = {
+                    when (it) {
+                        0 -> "Exact time"
+                        else -> "$it min before"
+                    }
+                }
+            ) { reminderOffset = it }
+
+
             error?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(it, color = Color(0xFFFF3D57), fontSize = 13.sp)
@@ -283,10 +315,10 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                             description = note.trim(),
                             category = category,
                             priority = priority,
-                            taskType = if (isDeadline) TaskType.DEADLINE else TaskType.SCHEDULED,
+                            repeatRule = repeatRule,
                             difficulty = difficulty,
-                            repeatRule = RepeatRule.NEVER,
-                            durationMinutes = dur
+                            durationMinutes = dur,
+                            reminderOffsetMinutes = reminderOffset,
                         )
                         if (isSaving) return@clickable
                         isSaving = true
