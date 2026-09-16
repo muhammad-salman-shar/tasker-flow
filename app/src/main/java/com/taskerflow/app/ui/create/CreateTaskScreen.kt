@@ -287,10 +287,11 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                         )
                         if (isEdit) {
                             vm.updateTaskWithOccurrence(task, scheduledAt, finalDeadline)
+                        } else if (isDeadline) {
+                            vm.createDeadlineTask(task, scheduledAt, deadlineAt)
                         } else {
                             vm.createTask(task, scheduledAt, finalDeadline)
                         }
-                        onBack()
                     },
                 contentAlignment = Alignment.Center
             ) {

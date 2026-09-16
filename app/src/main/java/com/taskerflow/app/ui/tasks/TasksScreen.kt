@@ -22,7 +22,9 @@ import androidx.compose.ui.unit.sp
 import com.taskerflow.app.data.model.OccurrenceEntity
 import com.taskerflow.app.data.model.OccurrenceStatus
 import com.taskerflow.app.data.model.TaskEntity
+import com.taskerflow.app.data.model.TaskType
 import com.taskerflow.app.ui.MainViewModel
+import com.taskerflow.app.ui.components.DeadlineTaskCard
 import com.taskerflow.app.ui.components.TaskCard
 import java.text.SimpleDateFormat
 import java.util.*
@@ -59,6 +61,9 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
         TaskFilter.RECOVERY -> emptyList()
     }
 
+    // Group by taskId
+    val grouped: Map<Long, List<OccurrenceEntity>> = filtered.groupBy { it.taskId }
+
     val completedCount = all.count {
         it.status == OccurrenceStatus.COMPLETED || it.status == OccurrenceStatus.RECOVERED
     }
@@ -79,9 +84,7 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
             ) {
                 Text(
                     "$activeCount / ${activeCount + completedCount} Active",
-                    color = Color(0xFFFFB300),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
+                    color = Color(0xFFFFB300), fontSize = 11.sp, fontWeight = FontWeight.Bold
                 )
             }
         }
@@ -106,8 +109,7 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                     Text(
                         f.label,
                         color = if (selected) Color.White else Color(0xFF79829C),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -116,23 +118,35 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
 
         if (filter == TaskFilter.RECOVERY) {
             RecoveryList(vm)
-        } else if (filtered.isEmpty()) {
+        } else if (grouped.isEmpty()) {
             EmptyState(filter)
         } else {
             LazyColumn(contentPadding = PaddingValues(bottom = 90.dp)) {
-                items(filtered, key = { it.id }) { occ ->
-                    val task = state.tasksById[occ.taskId]
-                    val timeText = formatTime(occ.scheduledAt)
-                    val ep = task?.difficulty?.epReward ?: 10
-                    TaskCard(
-                        title = task?.title ?: "(deleted)",
-                        category = task?.category?.name ?: "OTHER",
-                        timeText = timeText,
-                        epText = "+$ep EP",
-                        status = occ.status,
-                        onClick = { task?.let { actionTask = it } },
-                        onComplete = { vm.completeOccurrence(occ.id) }
-                    )
+                grouped.forEach { (taskId, occs) ->
+                    val task = state.tasksById[taskId] ?: return@forEach
+                    item(key = "task_$taskId") {
+                        if (task.taskType == TaskType.DEADLINE && occs.size > 1) {
+                            DeadlineTaskCard(
+                                title = task.title,
+                                category = task.category.name,
+                                occurrences = occs,
+                                epReward = task.difficulty.epReward,
+                                onCompleteDay = { occId -> vm.completeOccurrence(occId) },
+                                onDayTap = { _ -> actionTask = task }
+                            )
+                        } else {
+                            val occ = occs.first()
+                            TaskCard(
+                                title = task.title,
+                                category = task.category.name,
+                                timeText = formatTime(occ.scheduledAt),
+                                epText = "+${task.difficulty.epReward} EP",
+                                status = occ.status,
+                                onClick = { actionTask = task },
+                                onComplete = { vm.completeOccurrence(occ.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -148,17 +162,13 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                 TextButton(onClick = {
                     actionTask = null
                     onEdit(task.id)
-                }) {
-                    Text("EDIT", color = Color(0xFFFFB300), fontWeight = FontWeight.Bold)
-                }
+                }) { Text("EDIT", color = Color(0xFFFFB300), fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     vm.deleteTask(task.id)
                     actionTask = null
-                }) {
-                    Text("DELETE", color = Color(0xFFFF3D57), fontWeight = FontWeight.Bold)
-                }
+                }) { Text("DELETE", color = Color(0xFFFF3D57), fontWeight = FontWeight.Bold) }
             }
         )
     }
