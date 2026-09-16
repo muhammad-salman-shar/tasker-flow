@@ -35,7 +35,7 @@ const val ROUTE_BLOCKER = "blocker"
 fun MainScreen(vm: MainViewModel) {
     val nav = rememberNavController()
     val tabs = listOf(Tab.Home, Tab.Tasks, Tab.Stats, Tab.Me)
-    val backStack by nav.currentNavBackStackEntryAsState()
+    val backStack by nav.currentBackStackEntryAsState()
     val currentDest = backStack?.destination
     val currentRoute = currentDest?.route
     val showFab = currentRoute != ROUTE_CREATE &&
