@@ -1,5 +1,8 @@
 package com.taskerflow.app.ui.home
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -35,85 +40,125 @@ fun HomeScreen(vm: MainViewModel) {
     val totalToday = state.todayOccurrences.size
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(8.dp))
-
-        // Header Health + EP
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            StatChip("❤️ ${stats.health}%", "HEALTH", Color(0xFFEF5350))
-            StatChip("⚡ ${stats.ep}", "EP", Color(0xFFFFC107))
-        }
         Spacer(Modifier.height(12.dp))
 
-        // Level card
+        // ---- Health & EP top row (gradient pills) ----
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GradientStat(
+                modifier = Modifier.weight(1f),
+                icon = "❤️",
+                value = "${stats.health}%",
+                label = "HEALTH",
+                gradient = listOf(Color(0xFFFF1744), Color(0xFFD81B60))
+            )
+            GradientStat(
+                modifier = Modifier.weight(1f),
+                icon = "⚡",
+                value = "${stats.ep}",
+                label = "EP",
+                gradient = listOf(Color(0xFFFFD54F), Color(0xFFFFA000))
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // ---- Level card ----
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF16161C)),
-            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF17171E)),
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Text("LEVEL ${stats.level}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                Spacer(Modifier.height(6.dp))
-                LinearProgressIndicator(
-                    progress = { if (total == 0) 0f else prog.toFloat() / total.toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(8.dp),
-                    color = Color(0xFFFFC107),
-                    trackColor = Color(0xFF2A2A32)
+            Column(Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("LEVEL", color = Color(0xFF9E9E9E), fontSize = 11.sp, letterSpacing = 2.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "${stats.level}",
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text("$prog / $total EP", color = Color(0xFFFFC107), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(12.dp))
+                GradientProgressBar(
+                    progress = if (total == 0) 0f else prog.toFloat() / total,
+                    gradient = listOf(Color(0xFFFFD54F), Color(0xFFFF6F00))
                 )
-                Spacer(Modifier.height(6.dp))
-                Text("$prog / $total EP", color = Color(0xFF9E9E9E), fontSize = 12.sp)
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        // Today card
+        // ---- Today card ----
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF16161C)),
-            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF17171E)),
+            shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(Modifier.padding(16.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("TODAY", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Column(Modifier.padding(18.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("TODAY", color = Color(0xFF9E9E9E), fontSize = 11.sp, letterSpacing = 2.sp)
+                    Spacer(Modifier.weight(1f))
                     if (stats.streak > 0) {
-                        Text("🔥 ${stats.streak}d", color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🔥", fontSize = 14.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("${stats.streak}d", color = Color(0xFFFF9800), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
                     }
                 }
                 Spacer(Modifier.height(6.dp))
-                Text("$completed / $totalToday Completed", color = Color(0xFF9E9E9E), fontSize = 12.sp)
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { if (totalToday == 0) 0f else completed.toFloat() / totalToday.toFloat() },
-                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                    color = Color(0xFF66BB6A),
-                    trackColor = Color(0xFF2A2A32)
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "$completed",
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        " / $totalToday",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text("Completed", color = Color(0xFF9E9E9E), fontSize = 12.sp)
+                }
+                Spacer(Modifier.height(10.dp))
+                GradientProgressBar(
+                    progress = if (totalToday == 0) 0f else completed.toFloat() / totalToday,
+                    gradient = listOf(Color(0xFF66BB6A), Color(0xFF2E7D32))
                 )
             }
         }
 
         Spacer(Modifier.height(16.dp))
 
-        // Recovery banner
+        // ---- Recovery banner ----
         if (state.activeRecoveries.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1313)),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("⚔️ RECOVERY ACTIVE", color = Color(0xFFEF5350), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text(
-                        "${state.activeRecoveries.size} quest(s) pending",
-                        color = Color(0xFFFFAB91), fontSize = 12.sp
-                    )
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("⚔️", fontSize = 22.sp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("RECOVERY ACTIVE", color = Color(0xFFEF5350), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                        Text("${state.activeRecoveries.size} quest(s) pending", color = Color(0xFFFFAB91), fontSize = 12.sp)
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
         }
 
-        // Tasks header
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("YOUR TASKS", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+        // ---- Tasks header ----
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("YOUR QUESTS", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp, letterSpacing = 1.sp)
+            Spacer(Modifier.weight(1f))
             Text("${state.todayOccurrences.size} today", color = Color(0xFF9E9E9E), fontSize = 12.sp)
         }
         Spacer(Modifier.height(6.dp))
@@ -121,7 +166,7 @@ fun HomeScreen(vm: MainViewModel) {
         if (state.todayOccurrences.isEmpty()) {
             EmptyTasks()
         } else {
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 80.dp)) {
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 90.dp)) {
                 items(state.todayOccurrences, key = { it.id }) { occ ->
                     val task = state.tasksById[occ.taskId]
                     val timeText = formatTime(occ.scheduledAt)
@@ -141,29 +186,71 @@ fun HomeScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun EmptyTasks() {
-    Column(
-        Modifier.fillMaxWidth().padding(top = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+private fun GradientStat(
+    modifier: Modifier = Modifier,
+    icon: String,
+    value: String,
+    label: String,
+    gradient: List<Color>
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Brush.linearGradient(gradient))
+            .padding(14.dp)
     ) {
-        Text("🎯", fontSize = 48.sp)
-        Spacer(Modifier.height(12.dp))
-        Text("NO QUESTS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Your first task starts your journey.",
-            color = Color(0xFF9E9E9E), fontSize = 13.sp, textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(8.dp))
-        Text("Tap ＋ to begin", color = Color(0xFFFFC107), fontSize = 12.sp)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(icon, fontSize = 18.sp)
+                Spacer(Modifier.width(6.dp))
+                Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 10.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(value, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
+        }
     }
 }
 
 @Composable
-private fun StatChip(value: String, label: String, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, color = color, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = Color(0xFF9E9E9E), fontSize = 10.sp, letterSpacing = 1.sp)
+private fun GradientProgressBar(progress: Float, gradient: List<Color>) {
+    val animated by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(600),
+        label = "progress"
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF23232B))
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(animated)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Brush.horizontalGradient(gradient))
+        )
+    }
+}
+
+@Composable
+private fun EmptyTasks() {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 50.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("🎯", fontSize = 56.sp)
+        Spacer(Modifier.height(14.dp))
+        Text("NO QUESTS YET", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, letterSpacing = 1.sp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Your first task starts your journey.",
+            color = Color(0xFF9E9E9E), fontSize = 13.sp, textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("Tap ＋ to begin", color = Color(0xFFFFC107), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
