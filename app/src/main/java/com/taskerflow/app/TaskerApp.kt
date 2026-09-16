@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.taskerflow.app.data.block.BlockedAppsRepository
 import com.taskerflow.app.data.db.AppDatabase
 import com.taskerflow.app.data.profile.ProfileRepository
 import com.taskerflow.app.data.repo.TaskRepository
@@ -21,6 +22,8 @@ class TaskerApp : Application() {
         private set
     lateinit var profileRepository: ProfileRepository
         private set
+    lateinit var blockedAppsRepository: BlockedAppsRepository
+        private set
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -29,6 +32,7 @@ class TaskerApp : Application() {
         val db = AppDatabase.get(this)
         repository = TaskRepository(db, this)
         profileRepository = ProfileRepository(this)
+        blockedAppsRepository = BlockedAppsRepository(this)
         NotificationHelper.ensureChannel(this)
 
         appScope.launch { repository.ensureStatsRow() }

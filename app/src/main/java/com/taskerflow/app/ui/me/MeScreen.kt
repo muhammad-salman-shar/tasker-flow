@@ -29,7 +29,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun MeScreen(vm: MainViewModel) {
+fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
     val state by vm.homeState.collectAsState()
     val s = state.stats
     val profile = state.profile
@@ -197,6 +197,23 @@ fun MeScreen(vm: MainViewModel) {
             }
         }
 
+        // App Blocker entry
+        SectionLabel("App Blocker")
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF17171E)),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenBlocker)
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("🔒", fontSize = 22.sp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Block distracting apps", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Blocked when Health < 50%", color = Color(0xFF79829C), fontSize = 11.sp)
+                }
+                Text(">", color = Color(0xFF79829C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Spacer(Modifier.height(20.dp))
         Spacer(Modifier.height(90.dp))
     }

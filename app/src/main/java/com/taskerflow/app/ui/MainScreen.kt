@@ -13,6 +13,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.taskerflow.app.ui.block.AppBlockerScreen
 import com.taskerflow.app.ui.create.CreateTaskScreen
 import com.taskerflow.app.ui.home.HomeScreen
 import com.taskerflow.app.ui.me.MeScreen
@@ -28,15 +29,18 @@ sealed class Tab(val route: String, val label: String, val icon: ImageVector) {
 
 const val ROUTE_CREATE = "create"
 const val ROUTE_EDIT = "edit/{taskId}"
+const val ROUTE_BLOCKER = "blocker"
 
 @Composable
 fun MainScreen(vm: MainViewModel) {
     val nav = rememberNavController()
     val tabs = listOf(Tab.Home, Tab.Tasks, Tab.Stats, Tab.Me)
-    val backStack by nav.currentBackStackEntryAsState()
+    val backStack by nav.currentNavBackStackEntryAsState()
     val currentDest = backStack?.destination
     val currentRoute = currentDest?.route
-    val showFab = currentRoute != ROUTE_CREATE && (currentRoute?.startsWith("edit/") != true)
+    val showFab = currentRoute != ROUTE_CREATE &&
+        currentRoute?.startsWith("edit/") != true &&
+        currentRoute != ROUTE_BLOCKER
 
     Scaffold(
         floatingActionButton = {
@@ -51,20 +55,22 @@ fun MainScreen(vm: MainViewModel) {
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF0E1018)) {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentDest?.hierarchy?.any { it.route == tab.route } == true,
-                        onClick = {
-                            nav.navigate(tab.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, tab.label) },
-                        label = { Text(tab.label) }
-                    )
+            if (currentRoute != ROUTE_BLOCKER) {
+                NavigationBar(containerColor = Color(0xFF0E1018)) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentDest?.hierarchy?.any { it.route == tab.route } == true,
+                            onClick = {
+                                nav.navigate(tab.route) {
+                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(tab.icon, tab.label) },
+                            label = { Text(tab.label) }
+                        )
+                    }
                 }
             }
         }
@@ -82,7 +88,7 @@ fun MainScreen(vm: MainViewModel) {
                 )
             }
             composable(Tab.Stats.route) { StatsScreen(vm) }
-            composable(Tab.Me.route) { MeScreen(vm) }
+            composable(Tab.Me.route) { MeScreen(vm, onOpenBlocker = { nav.navigate(ROUTE_BLOCKER) }) }
             composable(ROUTE_CREATE) { CreateTaskScreen(vm, onBack = { nav.popBackStack() }) }
             composable(
                 route = ROUTE_EDIT,
@@ -94,6 +100,9 @@ fun MainScreen(vm: MainViewModel) {
                     onBack = { nav.popBackStack() },
                     editingTaskId = taskId
                 )
+            }
+            composable(ROUTE_BLOCKER) {
+                AppBlockerScreen(vm, onBack = { nav.popBackStack() })
             }
         }
     }

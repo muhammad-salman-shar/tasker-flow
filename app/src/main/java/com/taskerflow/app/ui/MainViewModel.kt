@@ -133,6 +133,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun getTaskById(id: Long): TaskEntity? = homeState.value.tasksById[id]
 
+    fun blockedPackages(): kotlinx.coroutines.flow.Flow<Set<String>> = (getApplication() as TaskerApp).blockedAppsRepository.blockedPackages
+    fun strictMode(): kotlinx.coroutines.flow.Flow<Boolean> = (getApplication() as TaskerApp).blockedAppsRepository.strictMode
+    fun toggleBlockedApp(pkg: String, blocked: Boolean) = viewModelScope.launch {
+        (getApplication() as TaskerApp).blockedAppsRepository.toggleApp(pkg, blocked)
+    }
+    fun setStrictMode(on: Boolean) = viewModelScope.launch {
+        (getApplication() as TaskerApp).blockedAppsRepository.setStrictMode(on)
+    }
+
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
     fun saveProfile(p: ProfileData) = viewModelScope.launch { profileRepo.save(p) }
