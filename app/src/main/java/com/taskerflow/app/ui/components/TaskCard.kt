@@ -41,19 +41,16 @@ fun TaskCard(
             .fillMaxWidth()
             .padding(vertical = 5.dp)
             .border(1.dp, style.border, RoundedCornerShape(16.dp))
-            .then(
-                if (onClick != null) Modifier.clickable { onClick() } else Modifier
-            )
     ) {
         Row(
-            Modifier.padding(end = 12.dp, top = 8.dp, bottom = 8.dp),
+            Modifier.height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox as IconButton (reliable, distinct touch target)
+            // LEFT: checkbox touch zone — ONLY completes
             Box(
                 Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
+                    .width(64.dp)
+                    .fillMaxHeight()
                     .clickable(enabled = canComplete) { onComplete?.invoke() },
                 contentAlignment = Alignment.Center
             ) {
@@ -76,18 +73,40 @@ fun TaskCard(
                 }
             }
 
-            Column(Modifier.weight(1f)) {
+            // RIGHT: info + onClick zone (Edit/Delete dialog in Tasks screen)
+            Row(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .then(
+                        if (onClick != null) Modifier.clickable { onClick() }
+                        else Modifier
+                    )
+                    .padding(end = 14.dp, top = 14.dp, bottom = 14.dp, start = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        color = if (isDone) Color(0xFF9E9E9E) else Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "$category • $timeText",
+                        color = Color(0xFF9E9E9E),
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Text(
-                    title,
-                    color = if (isDone) Color(0xFF9E9E9E) else Color.White,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
+                    epText,
+                    color = style.accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
                 )
-                Spacer(Modifier.height(2.dp))
-                Text("$category • $timeText", color = Color(0xFF9E9E9E), fontSize = 12.sp)
             }
-
-            Text(epText, color = style.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
