@@ -13,8 +13,9 @@ data class TaskEntity(
     val taskType: TaskType = TaskType.SCHEDULED,
     val difficulty: Difficulty = Difficulty.NORMAL,
     val repeatRule: RepeatRule = RepeatRule.NEVER,
-    val customRepeatDays: String = "", // CSV of day-of-week ints for CUSTOM
+    val customRepeatDays: String = "",         // CSV of day-of-week ints (1=Mon..7=Sun)
     val durationMinutes: Int = 0,
+    val reminderOffsetMinutes: Int = 0,        // 0=exact time, 15=15 min before, etc.
     val createdAt: Long = System.currentTimeMillis(),
     val archived: Boolean = false
 )

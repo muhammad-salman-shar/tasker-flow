@@ -88,13 +88,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val now = System.currentTimeMillis()
             occs.forEach { occ ->
                 if (occ.scheduledAt > now) {
-                    AlarmScheduler.scheduleReminder(
-                        ctx = appCtx,
-                        occurrenceId = occ.id,
-                        triggerAt = occ.scheduledAt,
-                        title = task.title,
-                        epReward = task.difficulty.epReward
-                    )
+                        AlarmScheduler.scheduleReminder(
+                            ctx = appCtx,
+                            occurrenceId = occ.id,
+                            triggerAt = occ.scheduledAt,
+                            title = task.title,
+                            epReward = task.difficulty.epReward,
+                            offsetMinutes = task.reminderOffsetMinutes
+                        )
                 }
             }
             true
@@ -104,7 +105,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val (_, occId) = result
             AlarmScheduler.scheduleReminder(
                 ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
-                title = task.title, epReward = task.difficulty.epReward
+                title = task.title,
+                epReward = task.difficulty.epReward,
+                offsetMinutes = task.reminderOffsetMinutes
             )
             true
         }
@@ -116,7 +119,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             AlarmScheduler.cancel(appCtx, occId)
             AlarmScheduler.scheduleReminder(
                 ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
-                title = task.title, epReward = task.difficulty.epReward
+                title = task.title,
+                epReward = task.difficulty.epReward,
+                offsetMinutes = task.reminderOffsetMinutes
             )
         }
     }
