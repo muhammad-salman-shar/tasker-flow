@@ -117,6 +117,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun getTaskById(id: Long): TaskEntity? = homeState.value.tasksById[id]
 
+    fun refresh() = viewModelScope.launch { repo.forceRefresh() }
+
     fun saveProfile(p: ProfileData) = viewModelScope.launch { profileRepo.save(p) }
     fun currentProfile(): ProfileData = _profile.value
 }
