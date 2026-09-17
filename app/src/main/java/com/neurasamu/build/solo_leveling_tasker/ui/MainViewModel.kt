@@ -84,31 +84,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val result = repo.createDeadlineTaskWithDays(task, scheduledAt, deadlineEndMillis)
                 ?: return false
             val (_, occs) = result
-            // Schedule reminders for EVERY day
             val now = System.currentTimeMillis()
             occs.forEach { occ ->
                 if (occ.scheduledAt > now) {
-                        AlarmScheduler.scheduleReminder(
-                            ctx = appCtx,
-                            occurrenceId = occ.id,
-                            triggerAt = occ.scheduledAt,
-                            title = task.title,
-                            epReward = task.difficulty.epReward,
-                            offsetMinutes = task.reminderOffsetMinutes
-                        )
+                    AlarmScheduler.scheduleReminder(
+                        ctx = appCtx,
+                        occurrenceId = occ.id,
+                        triggerAt = occ.scheduledAt,
+                        title = task.title,
+                        epReward = task.difficulty.epReward,
+                        offsetMinutes = task.reminderOffsetMinutes
+                    )
                 }
             }
             true
         } else {
             val result = repo.createTaskWithOccurrence(task, scheduledAt, deadlineAt)
                 ?: return false
-            val (_, occId) = result
-            AlarmScheduler.scheduleReminder(
-                ctx = appCtx, occurrenceId = occId, triggerAt = scheduledAt,
-                title = task.title,
-                epReward = task.difficulty.epReward,
-                offsetMinutes = task.reminderOffsetMinutes
-            )
+            val (_, occs) = result
+            val now = System.currentTimeMillis()
+            occs.forEach { occ ->
+                if (occ.scheduledAt > now) {
+                    AlarmScheduler.scheduleReminder(
+                        ctx = appCtx,
+                        occurrenceId = occ.id,
+                        triggerAt = occ.scheduledAt,
+                        title = task.title,
+                        epReward = task.difficulty.epReward,
+                        offsetMinutes = task.reminderOffsetMinutes
+                    )
+                }
+            }
             true
         }
     }

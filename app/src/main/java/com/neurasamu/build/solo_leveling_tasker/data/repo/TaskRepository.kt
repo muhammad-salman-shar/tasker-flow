@@ -5,6 +5,7 @@ import com.neurasamu.build.solo_leveling_tasker.data.db.AppDatabase
 import com.neurasamu.build.solo_leveling_tasker.data.model.*
 import com.neurasamu.build.solo_leveling_tasker.domain.GamificationEngine
 import com.neurasamu.build.solo_leveling_tasker.domain.PenaltyEngine
+import com.neurasamu.build.solo_leveling_tasker.domain.RecurrenceHelper
 import com.neurasamu.build.solo_leveling_tasker.worker.NotificationHelper
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -36,22 +37,53 @@ class TaskRepository(
     fun observeStats() = statsDao.observe()
     fun observeOccurrencesForTask(taskId: Long) = occDao.observeForTask(taskId)
 
-    suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, Long>? {
+    suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, List<OccurrenceEntity>>? {
         if (!saveInFlight.compareAndSet(false, true)) return null
         try {
-            val fixedTask = task.copy(difficulty = Difficulty.EASY) // Day task = 5 EP
+            val fixedTask = task.copy(difficulty = Difficulty.EASY)
             val taskId = taskDao.insert(fixedTask)
-            val occId = occDao.insert(
-                OccurrenceEntity(
-                    taskId = taskId,
-                    scheduledAt = scheduledAt,
-                    deadlineAt = deadlineAt,
-                    durationMinutes = task.durationMinutes,
-                    status = OccurrenceStatus.PENDING
+            val created = mutableListOf<OccurrenceEntity>()
+            val durationMs = (deadlineAt - scheduledAt).coerceAtLeast(0L)
+
+            // Build schedule: first occurrence + repeated (if repeatRule != NEVER)
+            val schedule = mutableListOf<Long>()
+            schedule.add(scheduledAt)
+            if (task.repeatRule != RepeatRule.NEVER) {
+                val horizonMs = scheduledAt + 30L * 24 * 3600 * 1000
+                var cursor = scheduledAt
+                var guard = 0
+                while (guard < 60) {
+                    val next = RecurrenceHelper.nextOccurrence(cursor, task.repeatRule) ?: break
+                    if (next > horizonMs) break
+                    schedule.add(next)
+                    cursor = next
+                    guard++
+                }
+            }
+
+            schedule.forEach { when_ ->
+                val id = occDao.insert(
+                    OccurrenceEntity(
+                        taskId = taskId,
+                        scheduledAt = when_,
+                        deadlineAt = when_ + durationMs,
+                        durationMinutes = task.durationMinutes,
+                        status = OccurrenceStatus.PENDING
+                    )
                 )
-            )
-            eventDao.insert(EventEntity(occurrenceId = occId, taskId = taskId, type = EventType.CREATED))
-            return taskId to occId
+                created.add(
+                    OccurrenceEntity(
+                        id = id,
+                        taskId = taskId,
+                        scheduledAt = when_,
+                        deadlineAt = when_ + durationMs,
+                        durationMinutes = task.durationMinutes,
+                        status = OccurrenceStatus.PENDING
+                    )
+                )
+                eventDao.insert(EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED))
+            }
+            return taskId to created
         } finally {
             saveInFlight.set(false)
         }
