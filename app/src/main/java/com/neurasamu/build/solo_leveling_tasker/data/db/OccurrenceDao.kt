@@ -10,6 +10,7 @@ interface OccurrenceDao {
     @Insert suspend fun insertAll(list: List<OccurrenceEntity>): List<Long>
     @Update suspend fun update(o: OccurrenceEntity)
     @Query("DELETE FROM occurrences WHERE taskId = :taskId") suspend fun deleteByTask(taskId: Long)
+    @Query("DELETE FROM occurrences") suspend fun deleteAll()
     @Query("SELECT * FROM occurrences WHERE taskId = :taskId ORDER BY scheduledAt ASC")
     fun observeForTask(taskId: Long): Flow<List<OccurrenceEntity>>
     @Query("SELECT * FROM occurrences WHERE taskId = :taskId AND status = 'PENDING' ORDER BY scheduledAt ASC LIMIT 1")

@@ -34,6 +34,7 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
     val s = state.stats
     val profile = state.profile
     var showEditDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     val (prog, total) = GamificationEngine.levelProgress(s.ep)
     val rank = rankFor(s.level)
@@ -210,6 +211,25 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
                 Column(Modifier.weight(1f)) {
                     Text("Block distracting apps", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text("Blocked when Health < 50%", color = Color(0xFF79829C), fontSize = 11.sp)
+
+        // Danger Zone - Reset
+        SectionLabel("Danger Zone")
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1313)),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth().clickable { showResetDialog = true }
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("⚠️", fontSize = 22.sp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Reset to Default", color = Color(0xFFFF3D57), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("Delete all tasks, stats, and start fresh", color = Color(0xFF9E9E9E), fontSize = 11.sp)
+                }
+                Text(">", color = Color(0xFF9E9E9E), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
                 }
                 Text(">", color = Color(0xFF79829C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
@@ -229,6 +249,36 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
         )
     }
 }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            containerColor = Color(0xFF1C1C24),
+            title = {
+                Text("Reset everything?", color = Color(0xFFFF3D57), fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    "This will permanently delete all tasks, occurrences, stats, and progress. This cannot be undone.",
+                    color = Color(0xFF9E9E9E)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.resetAll()
+                    showResetDialog = false
+                }) {
+                    Text("RESET", color = Color(0xFFFF3D57), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("CANCEL", color = Color(0xFF9E9E9E))
+                }
+            }
+        )
+    }
+
 
 @Composable
 private fun SectionLabel(text: String) {

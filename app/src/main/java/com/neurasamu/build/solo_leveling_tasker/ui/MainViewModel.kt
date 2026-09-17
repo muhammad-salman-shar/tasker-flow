@@ -143,6 +143,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
+    fun resetAll(onDone: () -> Unit = {}) = viewModelScope.launch {
+        repo.resetAll()
+        onDone()
+    }
+
     // ---- App Blocker ----
     fun blockedPackages(): Flow<Set<String>> =
         (getApplication() as TaskerApp).blockedAppsRepository.blockedPackages

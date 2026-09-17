@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface EventDao {
     @Insert suspend fun insert(e: EventEntity): Long
+    @Query("DELETE FROM events") suspend fun deleteAll()
     @Query("SELECT * FROM events WHERE occurrenceId = :occId ORDER BY timestamp ASC")
     fun observeForOccurrence(occId: Long): Flow<List<EventEntity>>
     @Query("SELECT * FROM events WHERE occurrenceId = :occId ORDER BY timestamp DESC")

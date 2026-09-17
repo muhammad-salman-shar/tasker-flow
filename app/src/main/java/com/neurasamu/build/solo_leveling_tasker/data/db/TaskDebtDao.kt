@@ -9,6 +9,7 @@ interface TaskDebtDao {
     @Insert suspend fun insert(d: TaskDebtEntity): Long
     @Update suspend fun update(d: TaskDebtEntity)
     @Query("DELETE FROM task_debt WHERE taskId = :taskId") suspend fun deleteByTask(taskId: Long)
+    @Query("DELETE FROM task_debt") suspend fun deleteAll()
     @Query("SELECT * FROM task_debt WHERE resolved = 0 ORDER BY debtCreatedAt ASC")
     fun observeActive(): Flow<List<TaskDebtEntity>>
     @Query("SELECT * FROM task_debt WHERE occurrenceId = :occId AND resolved = 0 LIMIT 1")

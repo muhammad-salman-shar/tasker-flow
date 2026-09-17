@@ -297,6 +297,16 @@ class TaskRepository(
         eventDao.insert(EventEntity(occurrenceId = occId, taskId = occ.taskId, type = EventType.SNOOZED))
     }
 
+    /** Reset everything to default: tasks, occurrences, events, debts, recoveries, stats. */
+    suspend fun resetAll() {
+        occDao.deleteAll()
+        taskDao.deleteAll()
+        eventDao.deleteAll()
+        debtDao.deleteAll()
+        recoveryDao.deleteAll()
+        statsDao.upsert(PlayerStatsEntity(cycleStartedAt = System.currentTimeMillis()))
+    }
+
     suspend fun ensureStatsRow() {
         if (statsDao.get() == null) {
             statsDao.upsert(PlayerStatsEntity(cycleStartedAt = System.currentTimeMillis()))
