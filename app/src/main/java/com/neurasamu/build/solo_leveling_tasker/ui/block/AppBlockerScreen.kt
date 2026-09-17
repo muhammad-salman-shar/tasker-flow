@@ -102,9 +102,9 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
                         )
                     }
                 }
-                return@Column
             }
 
+            } else {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
 
             // Accessibility permission status card
