@@ -192,6 +192,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun strictMode(): Flow<Boolean> =
         (getApplication() as TaskerApp).blockedAppsRepository.strictMode
 
+    suspend fun getAlarm(id: Long): com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity? = repo.getAlarm(id)
+
     fun observeAlarms(): kotlinx.coroutines.flow.Flow<List<com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity>> =
         repo.observeAlarms()
 
