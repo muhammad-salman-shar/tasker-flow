@@ -198,12 +198,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         repo.observeAlarms()
 
     fun insertAlarm(a: com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity) = viewModelScope.launch {
-        repo.insertAlarm(a)
+        val id = repo.insertAlarm(a)
+        if (a.enabled) {
+            com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.scheduleAlarm(
+                appCtx, id, a.hour, a.minute, a.repeatRule.name, a.customDays
+            )
+        }
     }
     fun updateAlarm(a: com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity) = viewModelScope.launch {
         repo.updateAlarm(a)
+        com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.cancelAlarm(appCtx, a.id)
+        if (a.enabled) {
+            com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.scheduleAlarm(
+                appCtx, a.id, a.hour, a.minute, a.repeatRule.name, a.customDays
+            )
+        }
     }
     fun deleteAlarm(id: Long) = viewModelScope.launch {
+        com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.cancelAlarm(appCtx, id)
         repo.deleteAlarm(id)
     }
 
