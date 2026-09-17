@@ -110,17 +110,16 @@ fun TaskCard(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
-                if (onClone != null) {
+                if (onClick != null) {
                     Spacer(Modifier.width(6.dp))
                     Box(
                         Modifier
                             .size(36.dp)
                             .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(Color(0xFFFFB300).copy(alpha = 0.15f))
-                            .clickable { onClone.invoke() },
+                            .clickable { onClick.invoke() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("+", color = Color(0xFFFFB300), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("⋮", color = Color(0xFF9E9E9E), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
