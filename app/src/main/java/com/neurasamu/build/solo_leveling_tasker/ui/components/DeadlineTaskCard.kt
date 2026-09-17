@@ -188,7 +188,7 @@ fun DeadlineTaskCard(
                     )
                     Spacer(Modifier.height(2.dp))
                     if (!readOnly && onClone != null) {
-                        IconButton(onClick = onClone.invoke(), modifier = Modifier.size(22.dp)) {
+                        IconButton(onClick = { onClone?.invoke() }, modifier = Modifier.size(22.dp)) {
                             Text("+", color = Color(0xFFFFB300), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                     }
