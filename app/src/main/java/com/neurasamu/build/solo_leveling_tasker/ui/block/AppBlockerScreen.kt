@@ -102,7 +102,6 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
                         )
                     }
                 }
-            }
 
             } else {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -323,4 +322,5 @@ private fun AppRow(
             )
         }
     }
+}
 }
