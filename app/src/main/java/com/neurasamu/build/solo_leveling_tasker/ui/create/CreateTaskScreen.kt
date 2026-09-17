@@ -38,6 +38,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
     var note by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(Category.CODING) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
+    var criticalTimerMin by remember { mutableStateOf(60) }
     var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
     var isDeadline by remember { mutableStateOf(false) }
     var durationMinStr by remember { mutableStateOf("30") }
@@ -77,6 +78,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                 durationMinStr = t.durationMinutes.toString()
                 repeatRule = t.repeatRule
                 reminderOffset = t.reminderOffsetMinutes
+                criticalTimerMin = if (t.criticalTimerMinutes > 0) t.criticalTimerMinutes else 60
             }
             val occ = vm.fetchLatestOccurrence(editingTaskId!!)
             if (occ != null) {
@@ -178,6 +180,49 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                     options = Difficulty.values().toList(),
                     labelFn = { "+${it.epReward}" }
                 ) { difficulty = it }
+
+            // Critical priority: show Set Timer field
+            if (priority == Priority.CRITICAL) {
+                Spacer(Modifier.height(14.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1F0A0A)),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚠ CRITICAL TASK", color = Color(0xFFFF1744), fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
+                            Spacer(Modifier.weight(1f))
+                            Text("Lock apps until timer ends", color = Color(0xFFFFAB91), fontSize = 10.sp)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Text("Set Timer (minutes)", color = Color(0xFF79829C), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = criticalTimerMin.toString(),
+                            onValueChange = { s ->
+                                if (s.length <= 4 && s.all { it.isDigit() }) {
+                                    criticalTimerMin = s.toIntOrNull() ?: 0
+                                }
+                            },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFFFF1744),
+                                unfocusedBorderColor = Color(0xFF23232B),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                cursorColor = Color(0xFFFF1744)
+                            )
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Task becomes locked once you tap START. You cannot checkmark it manually or unblock apps during the timer.",
+                            color = Color(0xFF9E9E9E), fontSize = 10.sp
+                        )
+                    }
+                }
+            }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -319,6 +364,7 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                             difficulty = difficulty,
                             durationMinutes = dur,
                             reminderOffsetMinutes = reminderOffset,
+                            criticalTimerMinutes = if (priority == Priority.CRITICAL) criticalTimerMin else 0,
                         )
                         if (isSaving) return@clickable
                         isSaving = true

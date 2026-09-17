@@ -16,6 +16,7 @@ data class TaskEntity(
     val customRepeatDays: String = "",         // CSV of day-of-week ints (1=Mon..7=Sun)
     val durationMinutes: Int = 0,
     val reminderOffsetMinutes: Int = 0,        // 0=exact time, 15=15 min before, etc.
+    val criticalTimerMinutes: Int = 0,         // >0 only for CRITICAL priority tasks
     val createdAt: Long = System.currentTimeMillis(),
     val archived: Boolean = false
 )

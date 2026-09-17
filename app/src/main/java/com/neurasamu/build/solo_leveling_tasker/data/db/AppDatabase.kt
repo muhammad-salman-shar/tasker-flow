@@ -15,7 +15,7 @@ import com.neurasamu.build.solo_leveling_tasker.data.model.*
         RecoveryQuestEntity::class,
         PlayerStatsEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

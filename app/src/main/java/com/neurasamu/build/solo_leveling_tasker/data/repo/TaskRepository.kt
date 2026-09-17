@@ -329,7 +329,81 @@ class TaskRepository(
         eventDao.insert(EventEntity(occurrenceId = occId, taskId = occ.taskId, type = EventType.SNOOZED))
     }
 
-    /** Clone a day task: creates a new task + occurrence tomorrow same time. */
+    /** Start a critical task: records startedAt + criticalEndsAt, locks apps. */
+    suspend fun startCriticalOccurrence(occId: Long, now: Long = System.currentTimeMillis()): Boolean {
+        val occ = occDao.getById(occId) ?: return false
+        val task = taskDao.getById(occ.taskId) ?: return false
+        if (task.priority != Priority.CRITICAL) return false
+        if (task.criticalTimerMinutes <= 0) return false
+        if (occ.status != OccurrenceStatus.PENDING) return false
+
+        val stats = statsDao.get() ?: PlayerStatsEntity()
+        if (stats.criticalActiveOccurrenceId != 0L) return false  // already active
+
+        val endsAt = now + task.criticalTimerMinutes * 60_000L
+        occDao.update(occ.copy(startedAt = now, criticalEndsAt = endsAt))
+        statsDao.upsert(stats.copy(criticalActiveOccurrenceId = occId))
+        eventDao.insert(
+            EventEntity(
+                occurrenceId = occId, taskId = task.id, type = EventType.CREATED,
+                note = "critical_started", timestamp = now
+            )
+        )
+        return true
+    }
+
+    /** Auto-complete a critical task when timer finishes; release lock. */
+    suspend fun finishCriticalOccurrence(occId: Long, now: Long = System.currentTimeMillis()): Boolean {
+        val occ = occDao.getById(occId) ?: return false
+        val task = taskDao.getById(occ.taskId) ?: return false
+        val stats = statsDao.get() ?: PlayerStatsEntity()
+
+        val minutesLate = ((now - occ.deadlineAt) / 60000L).toInt()
+        val baseEp = task.difficulty.epReward
+        val (newStats, epResult) = GamificationEngine.applyCompletion(stats, baseEp, minutesLate)
+
+        occDao.update(
+            occ.copy(
+                status = if (minutesLate > 0) OccurrenceStatus.LATE else OccurrenceStatus.COMPLETED,
+                completedAt = now,
+                criticalEndsAt = null
+            )
+        )
+        statsDao.upsert(newStats.copy(criticalActiveOccurrenceId = 0L))
+        eventDao.insert(
+            EventEntity(
+                occurrenceId = occId, taskId = task.id, type = EventType.COMPLETED,
+                epDelta = epResult.epGained, healthDelta = epResult.healthGained,
+                timestamp = now, note = "critical_finished"
+            )
+        )
+        return true
+    }
+
+    /** Called by ticker: if critical timer elapsed, auto-finish. */
+    suspend fun checkCriticalTimer(now: Long = System.currentTimeMillis()): Boolean {
+        val stats = statsDao.get() ?: return false
+        val occId = stats.criticalActiveOccurrenceId
+        if (occId == 0L) return false
+        val occ = occDao.getById(occId) ?: run {
+            statsDao.upsert(stats.copy(criticalActiveOccurrenceId = 0L))
+            return false
+        }
+        val endsAt = occ.criticalEndsAt ?: return false
+        if (now >= endsAt) {
+            finishCriticalOccurrence(occId, endsAt)
+            return true
+        }
+        return false
+    }
+
+    /** Is a critical task currently locking the device? */
+    suspend fun isCriticalActive(): Boolean {
+        val stats = statsDao.get() ?: return false
+        return stats.criticalActiveOccurrenceId != 0L
+    }
+
+    /** Clone a day task
     suspend fun cloneDayTask(taskId: Long): Pair<Long, Long>? {
         val task = taskDao.getById(taskId) ?: return null
         val occ = occDao.getLatestForTask(taskId) ?: return null

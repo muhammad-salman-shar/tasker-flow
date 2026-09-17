@@ -25,5 +25,7 @@ data class OccurrenceEntity(
     val completedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     // how many per-minute penalties already applied after deadline
-    val penaltyAppliedCount: Int = 0
+    val penaltyAppliedCount: Int = 0,
+    val startedAt: Long? = null,
+    val criticalEndsAt: Long? = null
 )

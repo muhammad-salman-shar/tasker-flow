@@ -20,10 +20,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neurasamu.build.solo_leveling_tasker.data.model.OccurrenceEntity
+import com.neurasamu.build.solo_leveling_tasker.data.model.Priority
 import com.neurasamu.build.solo_leveling_tasker.data.model.OccurrenceStatus
 import com.neurasamu.build.solo_leveling_tasker.data.model.TaskEntity
 import com.neurasamu.build.solo_leveling_tasker.data.model.TaskType
 import com.neurasamu.build.solo_leveling_tasker.ui.MainViewModel
+import com.neurasamu.build.solo_leveling_tasker.ui.components.CriticalTaskCard
 import com.neurasamu.build.solo_leveling_tasker.ui.components.DeadlineTaskCard
 import com.neurasamu.build.solo_leveling_tasker.ui.components.TaskCard
 import java.text.SimpleDateFormat
@@ -156,16 +158,31 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                             )
                         } else {
                             val occ = occs.sortedBy { it.scheduledAt }.first()
-                            TaskCard(
-                                title = task.title,
-                                category = task.category.name,
-                                timeText = formatTime(occ.scheduledAt),
-                                epText = "+${task.difficulty.epReward} EP",
-                                status = occ.status,
-                                onClick = { actionTask = task },
-                                onComplete = { vm.completeOccurrence(occ.id) },
-                                onClone = { vm.cloneDayTask(task.id) }
-                            )
+                            if (task.priority == Priority.CRITICAL && task.criticalTimerMinutes > 0) {
+                                CriticalTaskCard(
+                                    title = task.title,
+                                    category = task.category.name,
+                                    timeText = formatTime(occ.scheduledAt),
+                                    epText = "+${task.difficulty.epReward} EP",
+                                    status = occ.status,
+                                    occurrence = occ,
+                                    criticalTimerMinutes = task.criticalTimerMinutes,
+                                    onStart = { vm.startCritical(occ.id) },
+                                    onFinish = { vm.finishCritical(occ.id) },
+                                    onClick = { actionTask = task }
+                                )
+                            } else {
+                                TaskCard(
+                                    title = task.title,
+                                    category = task.category.name,
+                                    timeText = formatTime(occ.scheduledAt),
+                                    epText = "+${task.difficulty.epReward} EP",
+                                    status = occ.status,
+                                    onClick = { actionTask = task },
+                                    onComplete = { vm.completeOccurrence(occ.id) },
+                                    onClone = { vm.cloneDayTask(task.id) }
+                                )
+                            }
                         }
                     }
                 }

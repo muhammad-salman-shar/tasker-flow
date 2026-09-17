@@ -149,6 +149,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
+    fun startCritical(occId: Long) = viewModelScope.launch { repo.startCriticalOccurrence(occId) }
+    fun finishCritical(occId: Long) = viewModelScope.launch { repo.finishCriticalOccurrence(occId) }
+    fun forceCheckCritical() = viewModelScope.launch { repo.checkCriticalTimer() }
+
     fun cloneDayTask(taskId: Long) = viewModelScope.launch {
         val result = repo.cloneDayTask(taskId) ?: return@launch
         val (_, occId) = result

@@ -19,5 +19,6 @@ data class PlayerStatsEntity(
     val totalRecoveries: Int = 0,
     // Highest EP milestone (multiple of 5) that has already awarded HP.
     // Prevents re-awarding HP if EP drops and comes back up.
-    val highestEpMilestone: Int = 0
+    val highestEpMilestone: Int = 0,
+    val criticalActiveOccurrenceId: Long = 0L
 )
