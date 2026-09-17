@@ -168,7 +168,7 @@ fun CreateEditAlarmScreen(
             OutlinedTextField(
                 value = label,
                 onValueChange = { if (it.length <= 30) label = it },
-                placeholder = { Text("Wake up, Namaz, Medicine…", color = Color(0xFF79829C)) },
+                placeholder = { Text("Wake up, Office, Medicine…", color = Color(0xFF79829C)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
