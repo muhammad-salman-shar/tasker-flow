@@ -25,3 +25,5 @@ enum class Category { STUDY, CODING, FITNESS, WORK, PERSONAL, CREATIVE, LEARNING
  * - CUSTOM:  > 31 days (violet, no yearly concept)
  */
 enum class DeadlineScale { WEEKLY, MONTHLY, CUSTOM }
+
+enum class DismissMethod { EASY, PIN }

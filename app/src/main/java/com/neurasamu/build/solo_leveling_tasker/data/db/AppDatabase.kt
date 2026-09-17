@@ -13,9 +13,10 @@ import com.neurasamu.build.solo_leveling_tasker.data.model.*
         EventEntity::class,
         TaskDebtEntity::class,
         RecoveryQuestEntity::class,
-        PlayerStatsEntity::class
+        PlayerStatsEntity::class,
+        AlarmEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -25,6 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun taskDebtDao(): TaskDebtDao
     abstract fun recoveryQuestDao(): RecoveryQuestDao
     abstract fun playerStatsDao(): PlayerStatsDao
+    abstract fun alarmDao(): AlarmDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
