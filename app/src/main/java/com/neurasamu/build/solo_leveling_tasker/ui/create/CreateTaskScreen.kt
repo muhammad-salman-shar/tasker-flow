@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.neurasamu.build.solo_leveling_tasker.data.model.*
 import com.neurasamu.build.solo_leveling_tasker.ui.MainViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -32,39 +32,29 @@ import java.util.*
 fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long? = null) {
     val ctx = LocalContext.current
     val isEdit = editingTaskId != null && editingTaskId > 0
+    val scope = rememberCoroutineScope()
 
-    // ---- form state ----
     var title by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var category by remember { mutableStateOf(Category.CODING) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
-    var criticalTimerMin by remember { mutableStateOf(60) }
     var difficulty by remember { mutableStateOf(Difficulty.NORMAL) }
-    var isDeadline by remember { mutableStateOf(false) }
-    var durationMinStr by remember { mutableStateOf("30") }
     var repeatRule by remember { mutableStateOf(RepeatRule.NEVER) }
     var reminderOffset by remember { mutableStateOf(0) }
+    var criticalTimerStr by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(!isEdit) }
 
-    val defaultStart = remember {
+    val cal = remember {
         Calendar.getInstance().apply {
             add(Calendar.HOUR_OF_DAY, 1)
-            set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
-        }.timeInMillis
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
     }
-    val defaultEnd = remember {
-        Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 7)
-            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59)
-        }.timeInMillis
-    }
+    var scheduledAt by remember { mutableStateOf(cal.timeInMillis) }
 
-    var scheduledAt by remember { mutableStateOf(defaultStart) }
-    var deadlineAt by remember { mutableStateOf(defaultEnd) }
-
-    // ---- LOAD existing task for edit ----
     LaunchedEffect(editingTaskId) {
         if (isEdit) {
             val t = vm.fetchTask(editingTaskId!!)
@@ -74,16 +64,13 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                 category = t.category
                 priority = t.priority
                 difficulty = t.difficulty
-                isDeadline = t.taskType == TaskType.DEADLINE
-                durationMinStr = t.durationMinutes.toString()
                 repeatRule = t.repeatRule
                 reminderOffset = t.reminderOffsetMinutes
-                criticalTimerMin = if (t.criticalTimerMinutes > 0) t.criticalTimerMinutes else 60
+                criticalTimerStr = if (t.criticalTimerMinutes > 0) t.criticalTimerMinutes.toString() else ""
             }
             val occ = vm.fetchLatestOccurrence(editingTaskId!!)
             if (occ != null) {
                 scheduledAt = occ.scheduledAt
-                deadlineAt = occ.deadlineAt
             }
             loaded = true
         }
@@ -91,7 +78,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
 
     val dateFmt = remember { SimpleDateFormat("dd MMM yy", Locale.getDefault()) }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -180,8 +166,8 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                     options = Difficulty.values().toList(),
                     labelFn = { "+${it.epReward}" }
                 ) { difficulty = it }
+            }
 
-            // Critical priority: show Set Timer field
             if (priority == Priority.CRITICAL) {
                 Spacer(Modifier.height(14.dp))
                 Card(
@@ -199,12 +185,9 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                         Text("Set Timer (minutes)", color = Color(0xFF79829C), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                         Spacer(Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = criticalTimerMin.toString(),
-                            onValueChange = { s ->
-                                if (s.length <= 4 && s.all { it.isDigit() }) {
-                                    criticalTimerMin = s.toIntOrNull() ?: 0
-                                }
-                            },
+                            value = criticalTimerStr,
+                            onValueChange = { s -> if (s.length <= 4 && s.all { it.isDigit() }) criticalTimerStr = s },
+                            placeholder = { Text("e.g. 60", color = Color(0xFF555555)) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -217,99 +200,34 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Task becomes locked once you tap START. You cannot checkmark it manually or unblock apps during the timer.",
+                            "Task becomes locked once you tap START. Cannot be checked manually.",
                             color = Color(0xFF9E9E9E), fontSize = 10.sp
                         )
                     }
                 }
             }
+
+            Spacer(Modifier.height(14.dp))
+
+            Label("Schedule")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PickerBtn(Modifier.weight(1.2f), dateFmt.format(Date(scheduledAt))) {
+                    val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
+                    DatePickerDialog(ctx, { _, y, m, d ->
+                        c.set(y, m, d); scheduledAt = c.timeInMillis
+                    }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+                }
+                PickerBtn(Modifier.weight(1f), timeFmt.format(Date(scheduledAt))) {
+                    val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
+                    TimePickerDialog(ctx, { _, h, m ->
+                        c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, m)
+                        scheduledAt = c.timeInMillis
+                    }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
+                }
             }
 
             Spacer(Modifier.height(14.dp))
 
-            Label("Task Type")
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF131318))
-                    .padding(4.dp)
-            ) {
-                SegBtn(Modifier.weight(1f), "Day Task", !isDeadline) { isDeadline = false }
-                SegBtn(Modifier.weight(1f), "Deadline", isDeadline) { isDeadline = true }
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            if (!isDeadline) {
-                Label("Schedule")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PickerBtn(Modifier.weight(1.2f), dateFmt.format(Date(scheduledAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
-                        DatePickerDialog(ctx, { _, y, m, d ->
-                            c.set(y, m, d); scheduledAt = c.timeInMillis
-                        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-                    }
-                    PickerBtn(Modifier.weight(1f), timeFmt.format(Date(scheduledAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
-                        TimePickerDialog(ctx, { _, h, m ->
-                            c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, m)
-                            scheduledAt = c.timeInMillis
-                        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Label("Duration (min)")
-                OutlinedTextField(
-                    value = durationMinStr,
-                    onValueChange = { s -> if (s.length <= 4 && s.all { it.isDigit() }) durationMinStr = s },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFFFFB300),
-                        unfocusedBorderColor = Color(0xFF23232B),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        cursorColor = Color(0xFFFFB300)
-                    )
-                )
-            } else {
-                Label("Start Timeline")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PickerBtn(Modifier.weight(1.2f), dateFmt.format(Date(scheduledAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
-                        DatePickerDialog(ctx, { _, y, m, d ->
-                            c.set(y, m, d); scheduledAt = c.timeInMillis
-                        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-                    }
-                    PickerBtn(Modifier.weight(1f), timeFmt.format(Date(scheduledAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = scheduledAt }
-                        TimePickerDialog(ctx, { _, h, m ->
-                            c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, m)
-                            scheduledAt = c.timeInMillis
-                        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                Label("End Deadline")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PickerBtn(Modifier.weight(1.2f), dateFmt.format(Date(deadlineAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = deadlineAt }
-                        DatePickerDialog(ctx, { _, y, m, d ->
-                            c.set(y, m, d); deadlineAt = c.timeInMillis
-                        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-                    }
-                    PickerBtn(Modifier.weight(1f), timeFmt.format(Date(deadlineAt))) {
-                        val c = Calendar.getInstance().apply { timeInMillis = deadlineAt }
-                        TimePickerDialog(ctx, { _, h, m ->
-                            c.set(Calendar.HOUR_OF_DAY, h); c.set(Calendar.MINUTE, m)
-                            deadlineAt = c.timeInMillis
-                        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show()
-                    }
-                }
-            }
-
-            // ---- Repeat ----
             Label("Repeat")
             SimpleDropdown(
                 modifier = Modifier.fillMaxWidth(),
@@ -321,7 +239,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
 
             Spacer(Modifier.height(14.dp))
 
-            // ---- Reminder ----
             Label("Reminder")
             SimpleDropdown(
                 modifier = Modifier.fillMaxWidth(),
@@ -335,7 +252,6 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                     }
                 }
             ) { reminderOffset = it }
-
 
             error?.let {
                 Spacer(Modifier.height(10.dp))
@@ -351,33 +267,38 @@ fun CreateTaskScreen(vm: MainViewModel, onBack: () -> Unit, editingTaskId: Long?
                     .clip(RoundedCornerShape(16.dp))
                     .background(Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100))))
                     .clickable {
+                        if (isSaving) return@clickable
                         if (title.isBlank()) { error = "Title required"; return@clickable }
-                        val dur = durationMinStr.toIntOrNull() ?: 30
-                        val finalDeadline = if (isDeadline) deadlineAt else scheduledAt + dur * 60_000L
+                        if (priority == Priority.CRITICAL) {
+                            val timer = criticalTimerStr.toIntOrNull() ?: 0
+                            if (timer <= 0) { error = "Enter timer minutes for critical task"; return@clickable }
+                        }
+                        isSaving = true
                         val task = TaskEntity(
                             id = editingTaskId ?: 0L,
                             title = title.trim(),
                             description = note.trim(),
                             category = category,
                             priority = priority,
-                            repeatRule = repeatRule,
+                            taskType = TaskType.SCHEDULED,
                             difficulty = difficulty,
-                            durationMinutes = dur,
+                            repeatRule = repeatRule,
+                            durationMinutes = 0,
                             reminderOffsetMinutes = reminderOffset,
-                            criticalTimerMinutes = if (priority == Priority.CRITICAL) criticalTimerMin else 0,
+                            criticalTimerMinutes = if (priority == Priority.CRITICAL) (criticalTimerStr.toIntOrNull() ?: 0) else 0
                         )
-                        if (isSaving) return@clickable
-                        isSaving = true
+                        // deadlineAt = scheduledAt for simple tasks
+                        val deadlineAt = scheduledAt
                         scope.launch {
                             if (isEdit) {
-                                vm.updateTaskAndWait(task, scheduledAt, finalDeadline)
+                                vm.updateTaskAndWait(task, scheduledAt, deadlineAt)
                                 onBack()
                             } else {
                                 val saved = vm.saveTaskAndWait(
                                     task = task,
                                     scheduledAt = scheduledAt,
-                                    deadlineAt = finalDeadline,
-                                    isDeadline = isDeadline,
+                                    deadlineAt = deadlineAt,
+                                    isDeadline = false,
                                     deadlineEndMillis = deadlineAt
                                 )
                                 if (saved) onBack() else isSaving = false
@@ -411,23 +332,6 @@ private fun Label(text: String) {
         letterSpacing = 1.5.sp,
         modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
     )
-}
-
-@Composable
-private fun SegBtn(modifier: Modifier, text: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (selected) Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100)))
-                else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
-            )
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, color = if (selected) Color.White else Color(0xFF79829C), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-    }
 }
 
 @Composable

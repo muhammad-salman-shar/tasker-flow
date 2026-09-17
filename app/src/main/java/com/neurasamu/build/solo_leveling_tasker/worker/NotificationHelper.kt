@@ -74,7 +74,6 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(openPi)
             .setAutoCancel(true)
-            .addAction(android.R.drawable.checkbox_on_background, "Complete", completePi)
             .addAction(android.R.drawable.ic_menu_recent_history, "Snooze 10m", snoozePi)
             .build()
 
