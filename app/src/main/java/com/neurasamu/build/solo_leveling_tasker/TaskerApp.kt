@@ -57,7 +57,7 @@ class TaskerApp : Application() {
             while (true) {
                 try { repository.applyPenaltiesTick() } catch (_: Exception) {}
                 try { repository.checkCriticalTimer() } catch (_: Exception) {}
-                delay(5_000L)
+                delay(1_000L)
             }
         }
     }

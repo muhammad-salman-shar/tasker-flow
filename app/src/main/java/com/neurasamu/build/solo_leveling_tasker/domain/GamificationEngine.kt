@@ -47,7 +47,6 @@ object GamificationEngine {
     ): Pair<PlayerStatsEntity, EpResult> {
         val gained = computeCompletionEp(baseEp, minutesLate)
         val newEpRaw = if (forceCycleFill) {
-            // Fill current cycle to 90 → level up
             GameConstants.EP_PER_CYCLE
         } else {
             stats.ep + gained
@@ -75,6 +74,16 @@ object GamificationEngine {
             focusLockActive = newHealth < GameConstants.FOCUS_RELEASE_HEALTH_THRESHOLD && stats.focusLockActive
         )
         return updated to EpResult(gained, hpGain, reason, newEp, stats.level + cyclesGained - 1)
+    }
+
+    /** Award EP without touching HP/completion counters. Used for task creation reward. */
+    fun awardEp(stats: PlayerStatsEntity, amount: Int): PlayerStatsEntity {
+        if (amount <= 0) return stats
+        val newEpRaw = stats.ep + amount
+        val cyclesGained = newEpRaw / GameConstants.EP_PER_CYCLE
+        val newEp = newEpRaw % GameConstants.EP_PER_CYCLE
+        val newLevel = stats.level + cyclesGained
+        return stats.copy(ep = newEp, level = newLevel)
     }
 
     fun applyMiss(stats: PlayerStatsEntity): PlayerStatsEntity {

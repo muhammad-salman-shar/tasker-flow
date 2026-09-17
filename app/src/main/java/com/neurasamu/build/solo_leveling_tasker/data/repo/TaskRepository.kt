@@ -41,8 +41,8 @@ class TaskRepository(
     suspend fun createTaskWithOccurrence(task: TaskEntity, scheduledAt: Long, deadlineAt: Long): Pair<Long, List<OccurrenceEntity>>? {
         if (!saveInFlight.compareAndSet(false, true)) return null
         try {
-            val fixedTask = task.copy(difficulty = Difficulty.EASY)
-            val taskId = taskDao.insert(fixedTask)
+            // Respect user-chosen difficulty — no forced EASY
+            val taskId = taskDao.insert(task)
             val created = mutableListOf<OccurrenceEntity>()
             val durationMs = (deadlineAt - scheduledAt).coerceAtLeast(0L)
 
@@ -63,27 +63,22 @@ class TaskRepository(
             }
 
             schedule.forEach { when_ ->
-                val id = occDao.insert(
-                    OccurrenceEntity(
-                        taskId = taskId,
-                        scheduledAt = when_,
-                        deadlineAt = when_ + durationMs,
-                        durationMinutes = task.durationMinutes,
-                        status = OccurrenceStatus.PENDING
-                    )
+                val occ = OccurrenceEntity(
+                    taskId = taskId,
+                    scheduledAt = when_,
+                    deadlineAt = when_ + durationMs,
+                    durationMinutes = task.durationMinutes,
+                    status = OccurrenceStatus.PENDING
                 )
-                created.add(
-                    OccurrenceEntity(
-                        id = id,
-                        taskId = taskId,
-                        scheduledAt = when_,
-                        deadlineAt = when_ + durationMs,
-                        durationMinutes = task.durationMinutes,
-                        status = OccurrenceStatus.PENDING
-                    )
-                )
+                val id = occDao.insert(occ)
+                created.add(occ.copy(id = id))
                 eventDao.insert(EventEntity(occurrenceId = id, taskId = taskId, type = EventType.CREATED))
             }
+
+            // Award EP once for task creation
+            val stats = statsDao.get() ?: PlayerStatsEntity()
+            statsDao.upsert(GamificationEngine.awardEp(stats, task.difficulty.epReward))
+
             return taskId to created
         } finally {
             saveInFlight.set(false)
