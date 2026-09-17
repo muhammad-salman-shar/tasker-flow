@@ -76,8 +76,8 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         if (pkg.startsWith("com.android.")) return
 
         val shouldBlock = when {
-            // Critical active → lock everything non-essential
-            criticalActive -> true
+            // Critical active → lock only user-selected apps (respect whitelist)
+            criticalActive -> pkg in blockedSet
             // Test mode → use selected apps only (demo)
             testMode.value -> if (strictMode) true else pkg in blockedSet
             // Health < 50 → strict mode blocks all, else selected
