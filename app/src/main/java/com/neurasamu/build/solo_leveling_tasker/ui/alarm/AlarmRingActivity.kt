@@ -113,6 +113,10 @@ class AlarmRingActivity : ComponentActivity() {
     }
 
     private fun startRinging(alarm: AlarmEntity) {
+        // Persistent notification while ringing
+        com.neurasamu.build.solo_leveling_tasker.worker.NotificationHelper.showAlarmRinging(
+            this, alarm.id, alarm.label, String.format("%02d:%02d", alarm.hour, alarm.minute)
+        )
         // Ringtone
         try {
             val uri: Uri = if (alarm.soundUri.isBlank()) {
@@ -151,6 +155,7 @@ class AlarmRingActivity : ComponentActivity() {
     }
 
     private fun stopRinging() {
+        com.neurasamu.build.solo_leveling_tasker.worker.NotificationHelper.cancelAlarmRinging(this)
         try { mediaPlayer?.stop() } catch (_: Exception) {}
         mediaPlayer?.release()
         mediaPlayer = null

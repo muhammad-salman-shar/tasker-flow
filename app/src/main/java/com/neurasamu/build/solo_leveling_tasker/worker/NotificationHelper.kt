@@ -172,6 +172,38 @@ object NotificationHelper {
         try { NotificationManagerCompat.from(ctx).cancel(ID_CRITICAL) } catch (_: SecurityException) {}
     }
 
+    private const val ID_ALARM_RINGING = 99004
+
+    fun showAlarmRinging(ctx: Context, alarmId: Long, label: String, timeText: String) {
+        ensureChannel(ctx)
+        val intent = android.content.Intent(ctx, com.neurasamu.build.solo_leveling_tasker.ui.alarm.AlarmRingActivity::class.java).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("alarm_id", alarmId)
+        }
+        val pi = PendingIntent.getActivity(
+            ctx, ID_ALARM_RINGING, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentTitle("⏰ Alarm ringing")
+            .setContentText(if (label.isBlank()) timeText else "$timeText — $label")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setFullScreenIntent(pi, true)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(ID_ALARM_RINGING, notif) } catch (_: SecurityException) {}
+    }
+
+    fun cancelAlarmRinging(ctx: Context) {
+        try { NotificationManagerCompat.from(ctx).cancel(ID_ALARM_RINGING) } catch (_: SecurityException) {}
+    }
+
     private fun openAppPi(ctx: Context, id: Int): PendingIntent {
         val openIntent = Intent(ctx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
