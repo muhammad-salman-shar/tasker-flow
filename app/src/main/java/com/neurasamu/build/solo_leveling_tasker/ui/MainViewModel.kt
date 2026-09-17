@@ -143,6 +143,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() = viewModelScope.launch { repo.forceRefresh() }
 
+    fun cloneDayTask(taskId: Long) = viewModelScope.launch {
+        val result = repo.cloneDayTask(taskId) ?: return@launch
+        val (_, occId) = result
+        val task = repo.getTask(taskId) ?: return@launch
+        val occ = repo.getOccurrence(occId) ?: return@launch
+        com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.scheduleReminder(
+            ctx = appCtx, occurrenceId = occId, triggerAt = occ.scheduledAt,
+            title = task.title, epReward = task.difficulty.epReward,
+            offsetMinutes = task.reminderOffsetMinutes
+        )
+    }
+
+    fun cloneDeadlineTask(taskId: Long) = viewModelScope.launch {
+        val result = repo.cloneDeadlineTask(taskId) ?: return@launch
+        val (_, occs) = result
+        val task = repo.getTask(taskId) ?: return@launch
+        val now = System.currentTimeMillis()
+        occs.forEach { occ ->
+            if (occ.scheduledAt > now) {
+                com.neurasamu.build.solo_leveling_tasker.worker.AlarmScheduler.scheduleReminder(
+                    ctx = appCtx, occurrenceId = occ.id, triggerAt = occ.scheduledAt,
+                    title = task.title, epReward = task.difficulty.epReward,
+                    offsetMinutes = task.reminderOffsetMinutes
+                )
+            }
+        }
+    }
+
     fun resetAll(onDone: () -> Unit = {}) = viewModelScope.launch {
         repo.resetAll()
         onDone()

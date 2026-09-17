@@ -151,7 +151,8 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                                 epReward = task.difficulty.epReward,
                                 onCompleteDay = { occId -> vm.completeOccurrence(occId) },
                                 onDayTap = { _ -> actionTask = task },
-                                onMenuClick = { actionTask = task }
+                                onMenuClick = { actionTask = task },
+                                onClone = { vm.cloneDeadlineTask(task.id) }
                             )
                         } else {
                             val occ = occs.sortedBy { it.scheduledAt }.first()
@@ -162,7 +163,8 @@ fun TasksScreen(vm: MainViewModel, onEdit: (Long) -> Unit = {}) {
                                 epText = "+${task.difficulty.epReward} EP",
                                 status = occ.status,
                                 onClick = { actionTask = task },
-                                onComplete = { vm.completeOccurrence(occ.id) }
+                                onComplete = { vm.completeOccurrence(occ.id) },
+                                onClone = { vm.cloneDayTask(task.id) }
                             )
                         }
                     }

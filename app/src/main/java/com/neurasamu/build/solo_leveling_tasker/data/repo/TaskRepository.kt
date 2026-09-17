@@ -297,7 +297,61 @@ class TaskRepository(
         eventDao.insert(EventEntity(occurrenceId = occId, taskId = occ.taskId, type = EventType.SNOOZED))
     }
 
-    /** Reset everything to default: tasks, occurrences, events, debts, recoveries, stats. */
+    /** Clone a day task: creates a new task + occurrence tomorrow same time. */
+    suspend fun cloneDayTask(taskId: Long): Pair<Long, Long>? {
+        val task = taskDao.getById(taskId) ?: return null
+        val occ = occDao.getLatestForTask(taskId) ?: return null
+        val now = System.currentTimeMillis()
+        // next slot: tomorrow same time OR 24h after last scheduled
+        val base = maxOf(occ.scheduledAt, now)
+        val dayMs = 24L * 3600 * 1000
+        val newScheduled = base + dayMs
+        val durationMs = occ.deadlineAt - occ.scheduledAt
+        val newDeadline = newScheduled + durationMs
+        val newTask = task.copy(id = 0L, createdAt = now)
+        val newTaskId = taskDao.insert(newTask)
+        val newOccId = occDao.insert(
+            OccurrenceEntity(
+                taskId = newTaskId,
+                scheduledAt = newScheduled,
+                deadlineAt = newDeadline,
+                durationMinutes = newTask.durationMinutes,
+                status = OccurrenceStatus.PENDING
+            )
+        )
+        eventDao.insert(EventEntity(occurrenceId = newOccId, taskId = newTaskId, type = EventType.CREATED, note = "cloned_from_$taskId"))
+        return newTaskId to newOccId
+    }
+
+    /** Clone a deadline task: shifts all occurrences forward by the span length. */
+    suspend fun cloneDeadlineTask(taskId: Long): Pair<Long, List<OccurrenceEntity>>? {
+        val task = taskDao.getById(taskId) ?: return null
+        val occs = occDao.getAllForTask(taskId)
+        if (occs.isEmpty()) return null
+        val spanMs = occs.last().deadlineAt - occs.first().scheduledAt
+        val shiftMs = spanMs + 24L * 3600 * 1000  // span + 1 day gap
+        val now = System.currentTimeMillis()
+        val newTask = task.copy(id = 0L, createdAt = now)
+        val newTaskId = taskDao.insert(newTask)
+        val created = mutableListOf<OccurrenceEntity>()
+        for (occ in occs) {
+            val id = occDao.insert(
+                OccurrenceEntity(
+                    taskId = newTaskId,
+                    scheduledAt = occ.scheduledAt + shiftMs,
+                    deadlineAt = occ.deadlineAt + shiftMs,
+                    durationMinutes = occ.durationMinutes,
+                    status = OccurrenceStatus.PENDING
+                )
+            )
+            val saved = occ.copy(id = id, taskId = newTaskId, scheduledAt = occ.scheduledAt + shiftMs, deadlineAt = occ.deadlineAt + shiftMs, status = OccurrenceStatus.PENDING, completedAt = null, penaltyAppliedCount = 0)
+            created.add(saved)
+        }
+        eventDao.insert(EventEntity(occurrenceId = 0L, taskId = newTaskId, type = EventType.CREATED, note = "cloned_from_$taskId"))
+        return newTaskId to created
+    }
+
+    /** Reset everything to default. */
     suspend fun resetAll() {
         occDao.deleteAll()
         taskDao.deleteAll()

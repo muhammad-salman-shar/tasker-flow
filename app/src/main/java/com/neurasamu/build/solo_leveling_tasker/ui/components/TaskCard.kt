@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -27,7 +28,8 @@ fun TaskCard(
     epText: String,
     status: OccurrenceStatus,
     onClick: (() -> Unit)? = null,
-    onComplete: (() -> Unit)? = null
+    onComplete: (() -> Unit)? = null,
+    onClone: (() -> Unit)? = null
 ) {
     val style = cardStyle(status)
     val isDone = status == OccurrenceStatus.COMPLETED ||
@@ -108,6 +110,19 @@ fun TaskCard(
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
+                if (onClone != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(
+                        Modifier
+                            .size(36.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xFFFFB300).copy(alpha = 0.15f))
+                            .clickable { onClone.invoke() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("+", color = Color(0xFFFFB300), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }

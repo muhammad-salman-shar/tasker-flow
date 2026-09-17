@@ -110,7 +110,8 @@ fun DeadlineTaskCard(
     onCompleteDay: (Long) -> Unit,
     onDayTap: (Long) -> Unit = {},
     readOnly: Boolean = false,
-    onMenuClick: () -> Unit = {}
+    onMenuClick: () -> Unit = {},
+    onClone: (() -> Unit)? = null
 ) {
     val sorted = remember(occurrences) { occurrences.sortedBy { it.scheduledAt } }
     var expanded by remember { mutableStateOf(false) }
@@ -186,6 +187,11 @@ fun DeadlineTaskCard(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(2.dp))
+                    if (!readOnly && onClone != null) {
+                        IconButton(onClick = onClone.invoke(), modifier = Modifier.size(22.dp)) {
+                            Text("+", color = Color(0xFFFFB300), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     if (!readOnly) IconButton(onClick = onMenuClick, modifier = Modifier.size(22.dp)) {
                         Icon(Icons.Filled.MoreVert, null, tint = Color(0xFF9E9E9E), modifier = Modifier.size(20.dp))
                     }

@@ -25,6 +25,8 @@ interface OccurrenceDao {
     suspend fun getOverdue(now: Long): List<OccurrenceEntity>
     @Query("SELECT * FROM occurrences WHERE status = 'PENDING'")
     suspend fun getAllPending(): List<OccurrenceEntity>
+    @Query("SELECT * FROM occurrences WHERE taskId = :taskId ORDER BY scheduledAt ASC")
+    suspend fun getAllForTask(taskId: Long): List<OccurrenceEntity>
     @Query("SELECT COUNT(*) FROM occurrences WHERE status = 'MISSED'")
     suspend fun countMissed(): Int
 }
