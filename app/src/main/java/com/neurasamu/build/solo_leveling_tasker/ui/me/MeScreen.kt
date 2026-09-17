@@ -211,32 +211,30 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
                 Column(Modifier.weight(1f)) {
                     Text("Block distracting apps", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     Text("Blocked when Health < 50%", color = Color(0xFF79829C), fontSize = 11.sp)
-
-        // Danger Zone - Reset
-        SectionLabel("Danger Zone")
-        Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1313)),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth().clickable { showResetDialog = true }
-        ) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("⚠️", fontSize = 22.sp)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Reset to Default", color = Color(0xFFFF3D57), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text("Delete all tasks, stats, and start fresh", color = Color(0xFF9E9E9E), fontSize = 11.sp)
-                }
-                Text(">", color = Color(0xFF9E9E9E), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
+            Text(">", color = Color(0xFF79829C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
+    }
 
-                }
-                Text(">", color = Color(0xFF79829C), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    // Danger Zone - Reset
+    SectionLabel("Danger Zone")
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1313)),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth().clickable { showResetDialog = true }
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("⚠️", fontSize = 22.sp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Reset to Default", color = Color(0xFFFF3D57), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("Delete all tasks, stats, and start fresh", color = Color(0xFF9E9E9E), fontSize = 11.sp)
             }
+            Text(">", color = Color(0xFF9E9E9E), fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
+    }
         Spacer(Modifier.height(20.dp))
         Spacer(Modifier.height(90.dp))
-    }
 
     if (showEditDialog) {
         EditProfileDialog(
@@ -248,8 +246,6 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
             }
         )
     }
-}
-
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
@@ -279,6 +275,8 @@ fun MeScreen(vm: MainViewModel, onOpenBlocker: () -> Unit = {}) {
         )
     }
 
+    }
+}
 
 @Composable
 private fun SectionLabel(text: String) {
