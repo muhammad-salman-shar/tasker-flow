@@ -349,6 +349,7 @@ class TaskRepository(
                 note = "critical_started", timestamp = now
             )
         )
+        NotificationHelper.showCriticalStarted(appContext, task.title, endsAt)
         return true
     }
 
@@ -377,6 +378,7 @@ class TaskRepository(
                 timestamp = now, note = "critical_finished"
             )
         )
+        NotificationHelper.showCriticalFinished(appContext, task.title)
         return true
     }
 

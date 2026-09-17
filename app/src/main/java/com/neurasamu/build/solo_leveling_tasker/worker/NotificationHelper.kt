@@ -17,6 +17,7 @@ object NotificationHelper {
 
     private const val ID_FOCUS_LOCK = 99002
     private const val ID_HEALTH_WARNING = 99001
+    private const val ID_CRITICAL = 99003
 
     fun ensureChannel(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -134,6 +135,42 @@ object NotificationHelper {
         try {
             NotificationManagerCompat.from(ctx).cancel(ID_HEALTH_WARNING)
         } catch (_: SecurityException) {}
+    }
+
+    fun showCriticalStarted(ctx: Context, title: String, endsAt: Long) {
+        ensureChannel(ctx)
+        val pi = openAppPi(ctx, ID_CRITICAL)
+        val mins = ((endsAt - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0).toInt()
+        val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("🔴 Critical Task Active")
+            .setContentText("$title — $mins min lock")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$title\nDevice locked for $mins minutes. Apps blocked until timer ends."))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(ID_CRITICAL, notif) } catch (_: SecurityException) {}
+    }
+
+    fun showCriticalFinished(ctx: Context, title: String) {
+        try { NotificationManagerCompat.from(ctx).cancel(ID_CRITICAL) } catch (_: SecurityException) {}
+        ensureChannel(ctx)
+        val pi = openAppPi(ctx, ID_CRITICAL + 1)
+        val notif = NotificationCompat.Builder(ctx, CHANNEL_ALERT)
+            .setSmallIcon(android.R.drawable.checkbox_on_background)
+            .setContentTitle("✅ Critical Task Complete")
+            .setContentText(title)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        try { NotificationManagerCompat.from(ctx).notify(ID_CRITICAL + 1, notif) } catch (_: SecurityException) {}
+    }
+
+    fun cancelCritical(ctx: Context) {
+        try { NotificationManagerCompat.from(ctx).cancel(ID_CRITICAL) } catch (_: SecurityException) {}
     }
 
     private fun openAppPi(ctx: Context, id: Int): PendingIntent {
