@@ -192,6 +192,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun strictMode(): Flow<Boolean> =
         (getApplication() as TaskerApp).blockedAppsRepository.strictMode
 
+    fun observeAlarms(): kotlinx.coroutines.flow.Flow<List<com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity>> =
+        repo.observeAlarms()
+
+    fun insertAlarm(a: com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity) = viewModelScope.launch {
+        repo.insertAlarm(a)
+    }
+    fun updateAlarm(a: com.neurasamu.build.solo_leveling_tasker.data.model.AlarmEntity) = viewModelScope.launch {
+        repo.updateAlarm(a)
+    }
+    fun deleteAlarm(id: Long) = viewModelScope.launch {
+        repo.deleteAlarm(id)
+    }
+
     fun criticalActive(): kotlinx.coroutines.flow.Flow<Boolean> =
         repo.observeStats().map { it?.criticalActiveOccurrenceId ?: 0L != 0L }
     fun toggleBlockedApp(pkg: String, blocked: Boolean) = viewModelScope.launch {

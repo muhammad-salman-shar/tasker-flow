@@ -25,6 +25,7 @@ class TaskRepository(
     private val debtDao = db.taskDebtDao()
     private val recoveryDao = db.recoveryQuestDao()
     private val statsDao = db.playerStatsDao()
+    private val alarmDao = db.alarmDao()
 
     private var lastFocusLockActive = false
     private val saveInFlight = AtomicBoolean(false)
@@ -459,12 +460,21 @@ class TaskRepository(
         return newTaskId to created
     }
 
+    // ---- Alarms ----
+    fun observeAlarms(): Flow<List<AlarmEntity>> = alarmDao.observeAll()
+    suspend fun getAlarm(id: Long) = alarmDao.getById(id)
+    suspend fun insertAlarm(a: AlarmEntity): Long = alarmDao.insert(a)
+    suspend fun updateAlarm(a: AlarmEntity) { alarmDao.update(a) }
+    suspend fun deleteAlarm(id: Long) { alarmDao.deleteById(id) }
+    suspend fun getAllEnabledAlarms(): List<AlarmEntity> = alarmDao.getAllEnabled()
+
     /** Reset everything to default. */
     suspend fun resetAll() {
         occDao.deleteAll()
         taskDao.deleteAll()
         eventDao.deleteAll()
         debtDao.deleteAll()
+        alarmDao.deleteAll()
         recoveryDao.deleteAll()
         statsDao.upsert(PlayerStatsEntity(cycleStartedAt = System.currentTimeMillis()))
     }
