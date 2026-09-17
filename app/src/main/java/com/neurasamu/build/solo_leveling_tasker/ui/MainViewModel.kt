@@ -191,6 +191,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         (getApplication() as TaskerApp).blockedAppsRepository.blockedPackages
     fun strictMode(): Flow<Boolean> =
         (getApplication() as TaskerApp).blockedAppsRepository.strictMode
+
+    fun criticalActive(): kotlinx.coroutines.flow.Flow<Boolean> =
+        repo.observeStats().map { it?.criticalActiveOccurrenceId ?: 0L != 0L }
     fun toggleBlockedApp(pkg: String, blocked: Boolean) = viewModelScope.launch {
         (getApplication() as TaskerApp).blockedAppsRepository.toggleApp(pkg, blocked)
     }

@@ -36,6 +36,7 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
     val strict by vm.strictMode().collectAsState(initial = false)
     val serviceRunning by AppBlockerAccessibilityService.running.collectAsState()
     var testOn by remember { mutableStateOf(AppBlockerAccessibilityService.testMode.value) }
+    val criticalActive = vm.criticalActive().collectAsState(initial = false).value
 
     // Reload apps when screen first appears
     val allApps = remember { InstalledAppsLoader.load(ctx) }
@@ -65,6 +66,45 @@ fun AppBlockerScreen(vm: MainViewModel, onBack: () -> Unit) {
         },
         containerColor = Color(0xFF090A10)
     ) { padding ->
+
+            if (criticalActive) {
+                // Critical lock overlay — blocks all interactions
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1F0A0A)),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        Modifier.padding(20.dp).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("🔒", fontSize = 56.sp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "UNAVAILABLE",
+                            color = Color(0xFFFF1744),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 3.sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Critical task in progress",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "App Blocker settings are locked until the critical timer ends. Complete the critical task to unlock.",
+                            color = Color(0xFFFFAB91),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+                return@Column
+            }
+
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
 
             // Accessibility permission status card
