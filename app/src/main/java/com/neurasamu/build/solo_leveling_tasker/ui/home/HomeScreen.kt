@@ -30,6 +30,7 @@ import com.neurasamu.build.solo_leveling_tasker.data.model.TaskEntity
 import com.neurasamu.build.solo_leveling_tasker.data.model.TaskType
 import com.neurasamu.build.solo_leveling_tasker.domain.GamificationEngine
 import com.neurasamu.build.solo_leveling_tasker.ui.MainViewModel
+import com.neurasamu.build.solo_leveling_tasker.ui.components.CriticalTaskCard
 import com.neurasamu.build.solo_leveling_tasker.ui.components.DeadlineTaskCard
 import com.neurasamu.build.solo_leveling_tasker.ui.components.LiveClock
 import com.neurasamu.build.solo_leveling_tasker.ui.components.TaskCard
@@ -162,14 +163,30 @@ fun HomeScreen(vm: MainViewModel) {
             } else {
                 LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 90.dp)) {
                     items(dayTasks, key = { "day_${it.first.id}" }) { (task, occ) ->
-                        TaskCard(
-                            title = task.title,
-                            category = task.category.name,
-                            timeText = formatTime(occ.scheduledAt),
-                            epText = "+${task.difficulty.epReward} EP",
-                            status = occ.status,
-                            onComplete = null
-                        )
+                        if (task.priority == com.neurasamu.build.solo_leveling_tasker.data.model.Priority.CRITICAL
+                            && task.criticalTimerMinutes > 0) {
+                            CriticalTaskCard(
+                                title = task.title,
+                                category = task.category.name,
+                                timeText = formatTime(occ.scheduledAt),
+                                epText = "+${task.difficulty.epReward} EP",
+                                status = occ.status,
+                                occurrence = occ,
+                                criticalTimerMinutes = task.criticalTimerMinutes,
+                                onStart = { },
+                                onFinish = { },
+                                readOnly = true
+                            )
+                        } else {
+                            TaskCard(
+                                title = task.title,
+                                category = task.category.name,
+                                timeText = formatTime(occ.scheduledAt),
+                                epText = "+${task.difficulty.epReward} EP",
+                                status = occ.status,
+                                onComplete = null
+                            )
+                        }
                     }
                     items(deadlineTasks, key = { "dl_${it.first.id}" }) { (task, occs) ->
                         DeadlineTaskCard(

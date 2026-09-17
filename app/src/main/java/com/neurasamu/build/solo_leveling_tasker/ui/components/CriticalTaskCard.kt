@@ -32,6 +32,7 @@ fun CriticalTaskCard(
     criticalTimerMinutes: Int,
     onStart: () -> Unit,
     onFinish: () -> Unit,
+    readOnly: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val isDone = status == OccurrenceStatus.COMPLETED || status == OccurrenceStatus.LATE
@@ -167,6 +168,13 @@ fun CriticalTaskCard(
                     )
                 }
             } else if (!isDone) {
+                if (readOnly) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("⏱ ${criticalTimerMinutes} min lock", color = Color(0xFFFFAB91), fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text("Open Tasks to START", color = Color(0xFFFF1744), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    return@Column
+                }
                 // Idle: show START button
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
