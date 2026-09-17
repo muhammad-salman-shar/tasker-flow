@@ -403,7 +403,7 @@ class TaskRepository(
         return stats.criticalActiveOccurrenceId != 0L
     }
 
-    /** Clone a day task
+    /** Clone a day task. */
     suspend fun cloneDayTask(taskId: Long): Pair<Long, Long>? {
         val task = taskDao.getById(taskId) ?: return null
         val occ = occDao.getLatestForTask(taskId) ?: return null
