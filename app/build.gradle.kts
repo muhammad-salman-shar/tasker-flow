@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.taskerflow.app"
+    namespace = "com.neurasamu.build.solo_leveling_tasker"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.taskerflow.app"
+        applicationId = "com.neurasamu.build.solo_leveling_tasker"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

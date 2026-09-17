@@ -42,7 +42,7 @@
             android:name=".service.AppBlockerAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
-            android:label="Tasker Flow App Blocker">
+            android:label="SL Tasker App Blocker">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>

@@ -6,4 +6,4 @@
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_desc"
     android:notificationTimeout="100"
-    android:settingsActivity="com.taskerflow.app.MainActivity" />
+    android:settingsActivity="com.neurasamu.build.solo_leveling_tasker.MainActivity" />
